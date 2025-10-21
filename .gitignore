@@ -1,0 +1,59 @@
+# iOS
+ios/build/
+ios/DerivedData/
+ios/*.pbxuser
+ios/*.mode1v3
+ios/*.mode2v3
+ios/*.perspectivev3
+ios/*.xcuserstate
+ios/xcuserdata/
+ios/.DS_Store
+ios/Pods/
+ios/Podfile.lock
+
+# Swift Package Manager
+ios/.swiftpm/
+ios/.build/
+
+# Xcode
+ios/*.xcworkspace/xcuserdata/
+ios/*.xcodeproj/xcuserdata/
+
+# Firebase
+firebase/functions/node_modules/
+firebase/functions/lib/
+firebase/.firebase/
+
+# Environment Variables
+.env
+.env.local
+firebase/functions/.env
+firebase/functions/.env.local
+
+# API Keys (NEVER commit these)
+**/GoogleService-Info.plist
+firebase-adminsdk-*.json
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Thumbnails
+._*
+
+# IDEs
+.vscode/
+.idea/
+
+# Temporary files
+*.swp
+*.swo
+*~
+

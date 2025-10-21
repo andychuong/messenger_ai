@@ -1,0 +1,27 @@
+{
+  "name": "messageai-firebase",
+  "version": "1.0.0",
+  "description": "Firebase backend for MessageAI - Cloud Functions, Firestore rules, and configuration",
+  "main": "functions/lib/index.js",
+  "scripts": {
+    "build": "cd functions && npm run build",
+    "serve": "firebase emulators:start",
+    "shell": "firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy",
+    "deploy:functions": "firebase deploy --only functions",
+    "deploy:rules": "firebase deploy --only firestore:rules,storage:rules",
+    "logs": "firebase functions:log",
+    "test": "cd functions && npm test"
+  },
+  "keywords": [
+    "firebase",
+    "messaging",
+    "ai",
+    "cloud-functions"
+  ],
+  "author": "Andy Chuong",
+  "license": "UNLICENSED",
+  "private": true
+}
+

@@ -1,0 +1,24 @@
+# Copy this file to .env and fill in your API keys
+# DO NOT commit .env to version control
+
+# OpenAI Configuration
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_ORGANIZATION_ID=your_org_id_here
+
+# Vector Search Configuration (OPTIONAL)
+# Leave empty to use Firestore-only approach (free)
+# Alternatives: Pinecone, Chroma, Qdrant
+# VECTOR_STORE_TYPE=firestore
+# PINECONE_API_KEY=your_pinecone_api_key_here
+# PINECONE_ENVIRONMENT=your_pinecone_environment
+# PINECONE_INDEX_NAME=messageai-embeddings
+
+# Feature Flags
+ENABLE_AI_FEATURES=true
+ENABLE_VOICE_TRANSCRIPTION=true
+ENABLE_TRANSLATION=true
+
+# Rate Limiting
+MAX_AI_REQUESTS_PER_USER_PER_DAY=100
+MAX_TRANSLATION_REQUESTS_PER_USER_PER_DAY=50
+

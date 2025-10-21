@@ -1,0 +1,162 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    function isParticipant(participantList) {
+      return request.auth.uid in participantList;
+    }
+    
+    // Users collection
+    match /users/{userId} {
+      // Users can read their own profile and profiles of any user (for friend discovery)
+      allow read: if isSignedIn();
+      
+      // Users can only write to their own profile
+      allow create, update: if isOwner(userId);
+      
+      // Cannot delete user documents (handle via Cloud Function)
+      allow delete: if false;
+    }
+    
+    // Friendships collection
+    match /friendships/{friendshipId} {
+      // Can read if you're one of the participants
+      allow read: if isSignedIn() && 
+        (request.auth.uid == resource.data.userId1 || 
+         request.auth.uid == resource.data.userId2);
+      
+      // Can create friendship request
+      allow create: if isSignedIn() && 
+        request.auth.uid == request.resource.data.requestedBy;
+      
+      // Can update to accept/decline if you're the recipient
+      allow update: if isSignedIn() && 
+        (request.auth.uid == resource.data.userId1 || 
+         request.auth.uid == resource.data.userId2);
+      
+      // Can delete if you're a participant
+      allow delete: if isSignedIn() && 
+        (request.auth.uid == resource.data.userId1 || 
+         request.auth.uid == resource.data.userId2);
+    }
+    
+    // Conversations collection
+    match /conversations/{conversationId} {
+      // Can read if you're a participant
+      allow read: if isSignedIn() && 
+        isParticipant(resource.data.participants);
+      
+      // Can create conversation if you're in participants list
+      allow create: if isSignedIn() && 
+        isParticipant(request.resource.data.participants);
+      
+      // Can update conversation if you're a participant
+      allow update: if isSignedIn() && 
+        isParticipant(resource.data.participants);
+      
+      // Cannot delete conversations (handle via Cloud Function if needed)
+      allow delete: if false;
+      
+      // Messages subcollection
+      match /messages/{messageId} {
+        // Can read messages if you're a participant in the conversation
+        allow read: if isSignedIn() && 
+          isParticipant(get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants);
+        
+        // Can create message if you're a participant and the sender
+        allow create: if isSignedIn() && 
+          isParticipant(get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants) &&
+          request.auth.uid == request.resource.data.senderId &&
+          request.resource.data.text.size() <= 10000; // Max 10k characters
+        
+        // Can update message for status changes and reactions
+        allow update: if isSignedIn() && 
+          isParticipant(get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants);
+        
+        // Can delete own messages only
+        allow delete: if isSignedIn() && 
+          request.auth.uid == resource.data.senderId;
+      }
+      
+      // Threads subcollection
+      match /threads/{threadId} {
+        allow read: if isSignedIn() && 
+          isParticipant(get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants);
+        
+        allow create, update: if isSignedIn() && 
+          isParticipant(get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants);
+        
+        allow delete: if false;
+      }
+    }
+    
+    // Calls collection
+    match /calls/{callId} {
+      // Can read if you're caller or recipient
+      allow read: if isSignedIn() && 
+        (request.auth.uid == resource.data.callerId || 
+         request.auth.uid == resource.data.recipientId);
+      
+      // Can create if you're the caller
+      allow create: if isSignedIn() && 
+        request.auth.uid == request.resource.data.callerId;
+      
+      // Can update if you're involved in the call (for signaling)
+      allow update: if isSignedIn() && 
+        (request.auth.uid == resource.data.callerId || 
+         request.auth.uid == resource.data.recipientId);
+      
+      allow delete: if false;
+    }
+    
+    // Action Items collection
+    match /actionItems/{itemId} {
+      // Can read if you're the assignee or creator
+      allow read: if isSignedIn() && 
+        (request.auth.uid == resource.data.assignedTo || 
+         request.auth.uid == resource.data.createdBy);
+      
+      // Created by Cloud Functions
+      allow create: if false;
+      
+      // Can update if you're the assignee (to mark complete)
+      allow update: if isSignedIn() && 
+        request.auth.uid == resource.data.assignedTo;
+      
+      allow delete: if isOwner(resource.data.createdBy);
+    }
+    
+    // Decisions collection
+    match /decisions/{decisionId} {
+      // Can read if you're a participant
+      allow read: if isSignedIn() && 
+        request.auth.uid in resource.data.participants;
+      
+      // Created by Cloud Functions
+      allow create: if false;
+      
+      allow update, delete: if false;
+    }
+    
+    // Embeddings collection (for RAG)
+    match /embeddings/{embeddingId} {
+      // Only Cloud Functions can read/write embeddings
+      allow read, write: if false;
+    }
+    
+    // Default deny all other collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+

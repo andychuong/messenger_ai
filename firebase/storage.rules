@@ -1,0 +1,62 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Helper function to check authentication
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check file size (in MB)
+    function fileSizeUnder(sizeMB) {
+      return request.resource.size < sizeMB * 1024 * 1024;
+    }
+    
+    // Helper function to check if file is an image
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+    
+    // Helper function to check if file is audio
+    function isAudio() {
+      return request.resource.contentType.matches('audio/.*');
+    }
+    
+    // Profile pictures
+    match /users/{userId}/profile/{fileName} {
+      // Anyone can read profile pictures
+      allow read: if true;
+      
+      // Only the user can upload their own profile picture
+      allow write: if isSignedIn() && 
+        request.auth.uid == userId && 
+        isImage() && 
+        fileSizeUnder(5); // Max 5MB
+    }
+    
+    // Message media (images, voice messages)
+    match /conversations/{conversationId}/media/{fileName} {
+      // Can read if authenticated (TODO: verify conversation participant)
+      allow read: if isSignedIn();
+      
+      // Can upload media if authenticated and file is valid
+      allow write: if isSignedIn() && 
+        (isImage() || isAudio()) && 
+        fileSizeUnder(10); // Max 10MB for images, audio
+    }
+    
+    // Group photos
+    match /groups/{groupId}/photo/{fileName} {
+      allow read: if true;
+      allow write: if isSignedIn() && 
+        isImage() && 
+        fileSizeUnder(5);
+    }
+    
+    // Default deny
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
