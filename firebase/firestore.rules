@@ -63,8 +63,9 @@ service cloud.firestore {
       allow update: if isSignedIn() && 
         isParticipant(resource.data.participants);
       
-      // Cannot delete conversations (handle via Cloud Function if needed)
-      allow delete: if false;
+      // Can delete conversation if you're a participant
+      allow delete: if isSignedIn() && 
+        isParticipant(resource.data.participants);
       
       // Messages subcollection
       match /messages/{messageId} {
