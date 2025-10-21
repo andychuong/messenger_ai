@@ -14,21 +14,30 @@ import FirebaseFirestore
 class AuthService: ObservableObject {
     @Published var currentUser: User?
     @Published var isAuthenticated = false
+    @Published var isLoading = true  // Start as loading
     
     private let auth = Auth.auth()
     private let db = Firestore.firestore()
+    private var authStateHandle: AuthStateDidChangeListenerHandle?
     
     init() {
         // Listen for auth state changes
-        auth.addStateDidChangeListener { [weak self] _, user in
+        authStateHandle = auth.addStateDidChangeListener { [weak self] _, user in
             Task { @MainActor in
                 if let user = user {
                     await self?.fetchUserData(userId: user.uid)
                 } else {
                     self?.currentUser = nil
                     self?.isAuthenticated = false
+                    self?.isLoading = false  // Done loading
                 }
             }
+        }
+    }
+    
+    deinit {
+        if let handle = authStateHandle {
+            auth.removeStateDidChangeListener(handle)
         }
     }
     
@@ -70,10 +79,14 @@ class AuthService: ObservableObject {
             if let user = try? document.data(as: User.self) {
                 self.currentUser = user
                 self.isAuthenticated = true
+                self.isLoading = false  // Done loading
                 print("✅ User data loaded: \(user.displayName)")
+            } else {
+                self.isLoading = false  // Done loading even if user not found
             }
         } catch {
             print("❌ Error fetching user data: \(error.localizedDescription)")
+            self.isLoading = false  // Done loading even on error
         }
     }
     

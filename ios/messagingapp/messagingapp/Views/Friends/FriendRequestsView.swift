@@ -156,3 +156,4 @@ struct FriendRequestRow: View {
     FriendRequestsView(viewModel: FriendsListViewModel())
 }
 
+

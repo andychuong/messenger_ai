@@ -214,3 +214,4 @@ The AI features (translation, summarization, RAG) will work great with just Fire
 
 **Questions?** Check the main [APP_PLAN.md](./APP_PLAN.md) or [SETUP_GUIDE.md](./SETUP_GUIDE.md)
 
+

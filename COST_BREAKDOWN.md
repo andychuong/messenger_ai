@@ -307,3 +307,4 @@ At $2.99/month premium:
 
 See [VECTOR_STORE_OPTIONS.md](./VECTOR_STORE_OPTIONS.md) for why we don't need expensive vector databases.
 
+

@@ -10,7 +10,7 @@ import FirebaseFirestore
 import FirebaseAuth
 
 @MainActor
-class FriendshipService: ObservableObject {
+class FriendshipService {
     private let db = Firestore.firestore()
     
     // MARK: - Send Friend Request

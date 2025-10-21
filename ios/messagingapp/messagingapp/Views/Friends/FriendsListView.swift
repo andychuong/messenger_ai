@@ -9,11 +9,14 @@ import SwiftUI
 
 struct FriendsListView: View {
     @StateObject private var viewModel = FriendsListViewModel()
+    @StateObject private var conversationViewModel = ConversationListViewModel()
     @State private var showingAddFriend = false
     @State private var showingFriendRequests = false
+    @State private var selectedConversation: Conversation?
+    @State private var isCreatingConversation = false
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             VStack(spacing: 0) {
                 // Search Bar
                 HStack {
@@ -93,7 +96,16 @@ struct FriendsListView: View {
                 } else {
                     List {
                         ForEach(viewModel.filteredFriends, id: \.0.id) { friendship, user in
-                            FriendRow(user: user, friendship: friendship, viewModel: viewModel)
+                            FriendRow(
+                                user: user,
+                                friendship: friendship,
+                                viewModel: viewModel,
+                                onTapFriend: { selectedUser in
+                                    Task {
+                                        await openChat(with: selectedUser)
+                                    }
+                                }
+                            )
                         }
                     }
                     .listStyle(.plain)
@@ -121,7 +133,44 @@ struct FriendsListView: View {
                 await viewModel.loadFriends()
                 await viewModel.loadPendingRequests()
             }
+            .navigationDestination(item: $selectedConversation) { conversation in
+                if let currentUserId = conversationViewModel.currentUserId,
+                   let otherUserId = conversation.otherParticipantId(currentUserId: currentUserId) {
+                    ChatView(
+                        conversationId: conversation.id ?? "",
+                        otherUserId: otherUserId,
+                        otherUserName: conversation.title(currentUserId: currentUserId)
+                    )
+                }
+            }
+            .overlay {
+                if isCreatingConversation {
+                    ProgressView("Opening chat...")
+                        .padding()
+                        .background(Color(.systemBackground))
+                        .cornerRadius(10)
+                        .shadow(radius: 10)
+                }
+            }
         }
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func openChat(with user: User) async {
+        guard let userId = user.id else { return }
+        
+        isCreatingConversation = true
+        
+        if let conversation = await conversationViewModel.getOrCreateConversation(
+            with: userId,
+            userName: user.displayName,
+            userEmail: user.email
+        ) {
+            selectedConversation = conversation
+        }
+        
+        isCreatingConversation = false
     }
 }
 
@@ -129,11 +178,12 @@ struct FriendRow: View {
     let user: User
     let friendship: Friendship
     @ObservedObject var viewModel: FriendsListViewModel
+    let onTapFriend: (User) -> Void
     @State private var showingActionSheet = false
     
     var body: some View {
         Button(action: {
-            // TODO: Navigate to chat with this friend
+            onTapFriend(user)
         }) {
             HStack(spacing: 16) {
                 // Profile Picture with online status
@@ -182,7 +232,7 @@ struct FriendRow: View {
         .buttonStyle(.plain)
         .confirmationDialog("Friend Options", isPresented: $showingActionSheet) {
             Button("Message", role: .none) {
-                // TODO: Navigate to chat
+                onTapFriend(user)
             }
             
             Button("Remove Friend", role: .destructive) {
@@ -206,10 +256,7 @@ struct FriendRow: View {
         case .online:
             return "Online"
         case .offline:
-            if let lastSeen = user.lastSeen {
-                return "Last seen \(timeAgo(from: lastSeen))"
-            }
-            return "Offline"
+            return "Last seen \(timeAgo(from: user.lastSeen))"
         case .away:
             return "Away"
         }

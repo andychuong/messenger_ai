@@ -13,12 +13,10 @@ struct MainTabView: View {
     var body: some View {
         TabView {
             // Conversations tab
-            NavigationStack {
-                ConversationsPlaceholderView()
-            }
-            .tabItem {
-                Label("Messages", systemImage: "message.fill")
-            }
+            ConversationListView()
+                .tabItem {
+                    Label("Messages", systemImage: "message.fill")
+                }
             
             // Friends tab
             FriendsListView()

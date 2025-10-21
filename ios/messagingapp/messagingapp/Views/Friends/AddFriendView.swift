@@ -9,7 +9,7 @@ import SwiftUI
 
 struct AddFriendView: View {
     @Environment(\.dismiss) var dismiss
-    @StateObject private var friendshipService = FriendshipService()
+    private let friendshipService = FriendshipService()
     
     @State private var email = ""
     @State private var searchedUser: User?

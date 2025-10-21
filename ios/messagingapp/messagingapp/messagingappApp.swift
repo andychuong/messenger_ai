@@ -36,8 +36,11 @@ struct messagingappApp: App {
 
     var body: some Scene {
         WindowGroup {
-            // Show login or main app based on auth state
-            if authService.isAuthenticated {
+            // Show loading, login, or main app based on auth state
+            if authService.isLoading {
+                // Show loading screen while checking auth state
+                LoadingView()
+            } else if authService.isAuthenticated {
                 MainTabView()
                     .environmentObject(authService)
             } else {
