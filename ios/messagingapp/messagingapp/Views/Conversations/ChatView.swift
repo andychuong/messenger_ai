@@ -13,13 +13,28 @@ struct ChatView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedMessageForThread: Message?
     @State private var shouldScrollToBottom = false
+    @State private var showingGroupInfo = false
     
+    // Phase 4.5: Support for both direct and group conversations
+    init(conversation: Conversation) {
+        _viewModel = StateObject(wrappedValue: ChatViewModel(conversation: conversation))
+    }
+    
+    // Legacy initializer for direct conversations
     init(conversationId: String, otherUserId: String, otherUserName: String) {
-        _viewModel = StateObject(wrappedValue: ChatViewModel(
-            conversationId: conversationId,
-            otherUserId: otherUserId,
-            otherUserName: otherUserName
-        ))
+        // Create a minimal conversation object for direct chat
+        let conversation = Conversation(
+            id: conversationId,
+            participants: [otherUserId],
+            participantDetails: [otherUserId: ParticipantDetail(name: otherUserName, email: "", photoURL: nil, status: nil)],
+            type: .direct,
+            lastMessage: nil,
+            lastMessageTime: nil,
+            unreadCount: [:],
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+        _viewModel = StateObject(wrappedValue: ChatViewModel(conversation: conversation))
     }
     
     var body: some View {
@@ -49,11 +64,48 @@ struct ChatView: View {
                 }
             )
         }
-        .navigationTitle(viewModel.otherUserName)
+        .navigationTitle(viewModel.conversationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            // Custom title with online indicator or group info
+            ToolbarItem(placement: .principal) {
+                if viewModel.isGroupChat {
+                    // Group: Show name and member count
+                    Button(action: { showingGroupInfo = true }) {
+                        VStack(spacing: 2) {
+                            Text(viewModel.conversationTitle)
+                                .font(.headline)
+                            Text("\(viewModel.memberCount) members")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                } else {
+                    // Direct chat: Show name with online indicator
+                    HStack(spacing: 6) {
+                        Text(viewModel.conversationTitle)
+                            .font(.headline)
+                        
+                        if viewModel.otherUserStatus == .online {
+                            Circle()
+                                .fill(Color.green)
+                                .frame(width: 8, height: 8)
+                        }
+                    }
+                }
+            }
+            
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack(spacing: 16) {
+                    // Group info button for groups
+                    if viewModel.isGroupChat {
+                        Button {
+                            showingGroupInfo = true
+                        } label: {
+                            Image(systemName: "info.circle")
+                        }
+                    }
+                    
                     // Voice call button (Phase 5)
                     Button {
                         // Will implement in Phase 5
@@ -70,6 +122,11 @@ struct ChatView: View {
                     }
                     .disabled(true)
                 }
+            }
+        }
+        .sheet(isPresented: $showingGroupInfo) {
+            if let conversation = viewModel.conversation {
+                GroupInfoView(conversation: conversation)
             }
         }
         .onAppear {
@@ -142,10 +199,11 @@ struct ChatView: View {
                                     dateSeparator(for: message)
                                 }
                                 
-                                // Message row
+                                // Message row - Phase 4.5: Show sender names in groups
                                 MessageRow(
                                     message: message,
                                     currentUserId: viewModel.currentUserId ?? "",
+                                    isGroupChat: viewModel.isGroupChat,
                                     onDelete: {
                                         Task {
                                             await viewModel.deleteMessage(message)
@@ -238,7 +296,7 @@ struct ChatView: View {
     
     private var emptyStateView: some View {
         VStack(spacing: 16) {
-            Image(systemName: "bubble.left.and.bubble.right")
+            Image(systemName: viewModel.isGroupChat ? "person.3" : "bubble.left.and.bubble.right")
                 .font(.system(size: 60))
                 .foregroundColor(.gray)
             
@@ -246,9 +304,15 @@ struct ChatView: View {
                 .font(.headline)
                 .foregroundColor(.gray)
             
-            Text("Say hi to \(viewModel.otherUserName)!")
-                .font(.subheadline)
-                .foregroundColor(.gray)
+            if viewModel.isGroupChat {
+                Text("Start the conversation!")
+                    .font(.subheadline)
+                    .foregroundColor(.gray)
+            } else {
+                Text("Say hi to \(viewModel.conversationTitle)!")
+                    .font(.subheadline)
+                    .foregroundColor(.gray)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()

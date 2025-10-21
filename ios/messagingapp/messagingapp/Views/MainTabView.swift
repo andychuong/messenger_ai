@@ -163,7 +163,9 @@ struct ProfileView: View {
         .navigationTitle("Profile")
         .confirmationDialog("Logout", isPresented: $showLogoutConfirmation) {
             Button("Logout", role: .destructive) {
-                try? authService.logout()
+                Task {
+                    try? await authService.logout()
+                }
             }
             Button("Cancel", role: .cancel) { }
         } message: {

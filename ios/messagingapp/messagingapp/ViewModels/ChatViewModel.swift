@@ -19,6 +19,7 @@ class ChatViewModel: ObservableObject {
     @Published var isSending = false
     @Published var errorMessage: String?
     @Published var conversation: Conversation?
+    @Published var otherUserStatus: User.UserStatus = .offline  // For direct chats
     
     // Edit mode
     @Published var isEditingMessage = false
@@ -37,17 +38,52 @@ class ChatViewModel: ObservableObject {
     private let imageService = ImageService()
     private var messagesListener: ListenerRegistration?
     private var conversationListener: ListenerRegistration?
+    private var userStatusListener: ListenerRegistration?
+    private let db = Firestore.firestore()
     
     let conversationId: String
-    let otherUserId: String
-    let otherUserName: String
+    let otherUserId: String  // Only used for direct chats
+    let otherUserName: String  // Only used for direct chats (deprecated)
     
     var currentUserId: String? {
         return Auth.auth().currentUser?.uid
     }
     
+    // Phase 4.5: Group chat support
+    var isGroupChat: Bool {
+        return conversation?.type == .group
+    }
+    
+    var conversationTitle: String {
+        guard let conversation = conversation,
+              let currentUserId = currentUserId else {
+            return otherUserName
+        }
+        return conversation.title(currentUserId: currentUserId)
+    }
+    
+    var memberCount: Int {
+        return conversation?.memberCount ?? 0
+    }
+    
     // MARK: - Lifecycle
     
+    // Phase 4.5: New conversation-based initializer
+    init(conversation: Conversation) {
+        self.conversationId = conversation.id ?? ""
+        self.conversation = conversation
+        
+        // For backward compatibility with direct chats
+        if conversation.type == .direct, let currentUserId = Auth.auth().currentUser?.uid {
+            self.otherUserId = conversation.otherParticipantId(currentUserId: currentUserId) ?? ""
+            self.otherUserName = conversation.otherParticipantDetails(currentUserId: currentUserId)?.name ?? ""
+        } else {
+            self.otherUserId = ""
+            self.otherUserName = ""
+        }
+    }
+    
+    // Legacy initializer for backward compatibility
     init(conversationId: String, otherUserId: String, otherUserName: String) {
         self.conversationId = conversationId
         self.otherUserId = otherUserId
@@ -57,6 +93,7 @@ class ChatViewModel: ObservableObject {
     deinit {
         messagesListener?.remove()
         conversationListener?.remove()
+        userStatusListener?.remove()
     }
     
     // MARK: - Setup
@@ -77,6 +114,30 @@ class ChatViewModel: ObservableObject {
                 self?.conversation = conversation
             }
         }
+        
+        // Listen to other user's status (for direct chats only)
+        if !isGroupChat && !otherUserId.isEmpty {
+            setupUserStatusListener()
+        }
+    }
+    
+    // MARK: - User Status Listener
+    
+    private func setupUserStatusListener() {
+        userStatusListener = db.collection("users")
+            .document(otherUserId)
+            .addSnapshotListener { [weak self] snapshot, error in
+                guard let self = self,
+                      let data = snapshot?.data(),
+                      let statusString = data["status"] as? String,
+                      let status = User.UserStatus(rawValue: statusString) else {
+                    return
+                }
+                
+                Task { @MainActor in
+                    self.otherUserStatus = status
+                }
+            }
     }
     
     // MARK: - Load Messages

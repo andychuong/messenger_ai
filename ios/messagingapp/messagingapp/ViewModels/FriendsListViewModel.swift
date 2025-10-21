@@ -21,6 +21,7 @@ class FriendsListViewModel: ObservableObject {
     private let friendshipService = FriendshipService()
     private var friendsListener: ListenerRegistration?
     private var requestsListener: ListenerRegistration?
+    private var userStatusListeners: [String: ListenerRegistration] = [:]
     private let db = Firestore.firestore()
     
     var filteredFriends: [(Friendship, User)] {
@@ -40,6 +41,7 @@ class FriendsListViewModel: ObservableObject {
     deinit {
         friendsListener?.remove()
         requestsListener?.remove()
+        userStatusListeners.values.forEach { $0.remove() }
     }
     
     // MARK: - Real-time Listeners
@@ -81,12 +83,55 @@ class FriendsListViewModel: ObservableObject {
             friends = try await friendshipService.fetchFriends()
             // Sort by display name
             friends.sort { $0.1.displayName < $1.1.displayName }
+            
+            // Set up status listeners for each friend
+            setupUserStatusListeners()
         } catch {
             errorMessage = error.localizedDescription
             print("Error loading friends: \(error)")
         }
         
         isLoading = false
+    }
+    
+    // MARK: - User Status Listeners
+    
+    private func setupUserStatusListeners() {
+        // Remove old listeners
+        userStatusListeners.values.forEach { $0.remove() }
+        userStatusListeners.removeAll()
+        
+        // Set up listener for each friend
+        for (_, user) in friends {
+            guard let userId = user.id else { continue }
+            
+            let listener = db.collection("users")
+                .document(userId)
+                .addSnapshotListener { [weak self] snapshot, error in
+                    guard let self = self,
+                          let data = snapshot?.data(),
+                          let statusString = data["status"] as? String,
+                          let status = User.UserStatus(rawValue: statusString) else {
+                        return
+                    }
+                    
+                    Task { @MainActor in
+                        // Update the user's status in our friends array
+                        if let index = self.friends.firstIndex(where: { $0.1.id == userId }) {
+                            var updatedUser = self.friends[index].1
+                            updatedUser.status = status
+                            if let lastSeen = data["lastSeen"] as? Timestamp {
+                                updatedUser.lastSeen = lastSeen.dateValue()
+                            }
+                            self.friends[index].1 = updatedUser
+                            // Trigger view update
+                            self.objectWillChange.send()
+                        }
+                    }
+                }
+            
+            userStatusListeners[userId] = listener
+        }
     }
     
     // MARK: - Load Pending Requests

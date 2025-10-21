@@ -57,6 +57,9 @@ class AuthService: ObservableObject {
             .document(result.user.uid)
             .setData(user.toDictionary())
         
+        // Set status to online
+        try await updateUserStatus(userId: result.user.uid, status: .online)
+        
         // Fetch user data
         await fetchUserData(userId: result.user.uid)
         
@@ -67,6 +70,10 @@ class AuthService: ObservableObject {
     // MARK: - Login
     func login(email: String, password: String) async throws {
         let result = try await auth.signIn(withEmail: email, password: password)
+        
+        // Set status to online
+        try await updateUserStatus(userId: result.user.uid, status: .online)
+        
         await fetchUserData(userId: result.user.uid)
         
         // Request notification permission and save FCM token
@@ -74,14 +81,17 @@ class AuthService: ObservableObject {
     }
     
     // MARK: - Logout
-    func logout() throws {
-        // Remove FCM token from Firestore before logout
+    func logout() async throws {
+        // Set status to offline BEFORE logging out
         if let userId = currentUser?.id {
-            Task {
-                await NotificationService.shared.removeTokenFromFirestore(userId: userId)
-            }
+            // Set status to offline first
+            try? await updateUserStatus(userId: userId, status: .offline)
+            
+            // Remove FCM token
+            await NotificationService.shared.removeTokenFromFirestore(userId: userId)
         }
         
+        // Now sign out
         try auth.signOut()
         currentUser = nil
         isAuthenticated = false
@@ -145,6 +155,19 @@ class AuthService: ObservableObject {
             // Save FCM token to Firestore
             await NotificationService.shared.saveTokenToFirestore(userId: userId)
         }
+    }
+    
+    // MARK: - Status Management
+    
+    private func updateUserStatus(userId: String, status: User.UserStatus) async throws {
+        print("🔵 Updating user status to: \(status.rawValue) for user: \(userId)")
+        try await db.collection(User.collectionName)
+            .document(userId)
+            .updateData([
+                "status": status.rawValue,
+                "lastSeen": Timestamp(date: Date())
+            ])
+        print("✅ User status updated successfully to: \(status.rawValue)")
     }
 }
 

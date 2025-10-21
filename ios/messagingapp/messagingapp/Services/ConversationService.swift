@@ -234,5 +234,257 @@ class ConversationService: ObservableObject {
         
         return listener
     }
+    
+    // MARK: - Phase 4.5: Group Chat Management
+    
+    /// Create a new group conversation
+    func createGroupConversation(memberIds: [String], groupName: String?) async throws -> Conversation {
+        guard let currentUser = Auth.auth().currentUser else {
+            throw NSError(domain: "ConversationService", code: 401, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
+        }
+        
+        // Validate minimum members (current user + at least 2 others for a group)
+        guard memberIds.count >= 2 else {
+            throw NSError(domain: "ConversationService", code: 400, userInfo: [NSLocalizedDescriptionKey: "Group must have at least 2 other members"])
+        }
+        
+        // Include current user in participants
+        var allParticipants = memberIds
+        if !allParticipants.contains(currentUser.uid) {
+            allParticipants.append(currentUser.uid)
+        }
+        
+        // Fetch all participant details
+        var participantDetails: [String: ParticipantDetail] = [:]
+        
+        for userId in allParticipants {
+            let userDoc = try await db.collection("users").document(userId).getDocument()
+            if let userData = userDoc.data() {
+                participantDetails[userId] = ParticipantDetail(
+                    name: userData["displayName"] as? String ?? "Unknown",
+                    email: userData["email"] as? String ?? "",
+                    photoURL: userData["photoURL"] as? String,
+                    status: userData["status"] as? String
+                )
+            }
+        }
+        
+        let now = Date()
+        var unreadCount: [String: Int] = [:]
+        for userId in allParticipants {
+            unreadCount[userId] = 0
+        }
+        
+        let conversation = Conversation(
+            id: nil,
+            participants: allParticipants,
+            participantDetails: participantDetails,
+            type: .group,
+            lastMessage: nil,
+            lastMessageTime: nil,
+            unreadCount: unreadCount,
+            createdAt: now,
+            updatedAt: now,
+            groupName: groupName,
+            groupPhotoURL: nil,
+            admins: [currentUser.uid],  // Creator is the first admin
+            createdBy: currentUser.uid
+        )
+        
+        // Save to Firestore
+        let docRef = try await db.collection("conversations").addDocument(data: try Firestore.Encoder().encode(conversation))
+        
+        // Return conversation with ID
+        var newConversation = conversation
+        newConversation.id = docRef.documentID
+        
+        return newConversation
+    }
+    
+    /// Add members to an existing group
+    func addMembersToGroup(conversationId: String, userIds: [String]) async throws {
+        guard let currentUserId = Auth.auth().currentUser?.uid else {
+            throw NSError(domain: "ConversationService", code: 401, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
+        }
+        
+        let conversationRef = db.collection("conversations").document(conversationId)
+        let conversationDoc = try await conversationRef.getDocument()
+        
+        guard var conversation = try? conversationDoc.data(as: Conversation.self) else {
+            throw NSError(domain: "ConversationService", code: 404, userInfo: [NSLocalizedDescriptionKey: "Conversation not found"])
+        }
+        
+        // Check if user is admin
+        guard conversation.isAdmin(userId: currentUserId) else {
+            throw NSError(domain: "ConversationService", code: 403, userInfo: [NSLocalizedDescriptionKey: "Only admins can add members"])
+        }
+        
+        // Fetch new member details
+        var newParticipantDetails = conversation.participantDetails
+        for userId in userIds {
+            if !conversation.participants.contains(userId) {
+                let userDoc = try await db.collection("users").document(userId).getDocument()
+                if let userData = userDoc.data() {
+                    newParticipantDetails[userId] = ParticipantDetail(
+                        name: userData["displayName"] as? String ?? "Unknown",
+                        email: userData["email"] as? String ?? "",
+                        photoURL: userData["photoURL"] as? String,
+                        status: userData["status"] as? String
+                    )
+                    conversation.participants.append(userId)
+                    conversation.unreadCount[userId] = 0
+                }
+            }
+        }
+        
+        try await conversationRef.updateData([
+            "participants": conversation.participants,
+            "participantDetails": try Firestore.Encoder().encode(newParticipantDetails),
+            "unreadCount": conversation.unreadCount,
+            "updatedAt": Date()
+        ])
+    }
+    
+    /// Remove a member from group (admin only)
+    func removeMemberFromGroup(conversationId: String, userId: String) async throws {
+        guard let currentUserId = Auth.auth().currentUser?.uid else {
+            throw NSError(domain: "ConversationService", code: 401, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
+        }
+        
+        let conversationRef = db.collection("conversations").document(conversationId)
+        let conversationDoc = try await conversationRef.getDocument()
+        
+        guard var conversation = try? conversationDoc.data(as: Conversation.self) else {
+            throw NSError(domain: "ConversationService", code: 404, userInfo: [NSLocalizedDescriptionKey: "Conversation not found"])
+        }
+        
+        // Check if user is admin
+        guard conversation.isAdmin(userId: currentUserId) else {
+            throw NSError(domain: "ConversationService", code: 403, userInfo: [NSLocalizedDescriptionKey: "Only admins can remove members"])
+        }
+        
+        // Remove participant
+        conversation.participants.removeAll { $0 == userId }
+        conversation.participantDetails.removeValue(forKey: userId)
+        conversation.unreadCount.removeValue(forKey: userId)
+        
+        try await conversationRef.updateData([
+            "participants": conversation.participants,
+            "participantDetails": try Firestore.Encoder().encode(conversation.participantDetails),
+            "unreadCount": conversation.unreadCount,
+            "updatedAt": Date()
+        ])
+    }
+    
+    /// Leave a group
+    func leaveGroup(conversationId: String) async throws {
+        guard let currentUserId = Auth.auth().currentUser?.uid else {
+            throw NSError(domain: "ConversationService", code: 401, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
+        }
+        
+        let conversationRef = db.collection("conversations").document(conversationId)
+        let conversationDoc = try await conversationRef.getDocument()
+        
+        guard var conversation = try? conversationDoc.data(as: Conversation.self) else {
+            throw NSError(domain: "ConversationService", code: 404, userInfo: [NSLocalizedDescriptionKey: "Conversation not found"])
+        }
+        
+        // Remove current user from participants
+        conversation.participants.removeAll { $0 == currentUserId }
+        conversation.participantDetails.removeValue(forKey: currentUserId)
+        conversation.unreadCount.removeValue(forKey: currentUserId)
+        
+        // If user was admin, remove from admins
+        if var admins = conversation.admins {
+            admins.removeAll { $0 == currentUserId }
+            conversation.admins = admins
+        }
+        
+        // If no participants left, delete the conversation
+        if conversation.participants.isEmpty {
+            try await deleteConversation(conversationId: conversationId)
+        } else {
+            var updateData: [String: Any] = [
+                "participants": conversation.participants,
+                "participantDetails": try Firestore.Encoder().encode(conversation.participantDetails),
+                "unreadCount": conversation.unreadCount,
+                "updatedAt": Date()
+            ]
+            
+            if let admins = conversation.admins {
+                updateData["admins"] = admins
+            }
+            
+            try await conversationRef.updateData(updateData)
+        }
+    }
+    
+    /// Update group name
+    func updateGroupName(conversationId: String, name: String) async throws {
+        guard let currentUserId = Auth.auth().currentUser?.uid else {
+            throw NSError(domain: "ConversationService", code: 401, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
+        }
+        
+        let conversationRef = db.collection("conversations").document(conversationId)
+        let conversationDoc = try await conversationRef.getDocument()
+        
+        guard let conversation = try? conversationDoc.data(as: Conversation.self) else {
+            throw NSError(domain: "ConversationService", code: 404, userInfo: [NSLocalizedDescriptionKey: "Conversation not found"])
+        }
+        
+        // Check if user is admin
+        guard conversation.isAdmin(userId: currentUserId) else {
+            throw NSError(domain: "ConversationService", code: 403, userInfo: [NSLocalizedDescriptionKey: "Only admins can change group name"])
+        }
+        
+        try await conversationRef.updateData([
+            "groupName": name,
+            "updatedAt": Date()
+        ])
+    }
+    
+    /// Update group photo
+    func updateGroupPhoto(conversationId: String, imageURL: String) async throws {
+        guard let currentUserId = Auth.auth().currentUser?.uid else {
+            throw NSError(domain: "ConversationService", code: 401, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
+        }
+        
+        let conversationRef = db.collection("conversations").document(conversationId)
+        let conversationDoc = try await conversationRef.getDocument()
+        
+        guard let conversation = try? conversationDoc.data(as: Conversation.self) else {
+            throw NSError(domain: "ConversationService", code: 404, userInfo: [NSLocalizedDescriptionKey: "Conversation not found"])
+        }
+        
+        // Check if user is admin
+        guard conversation.isAdmin(userId: currentUserId) else {
+            throw NSError(domain: "ConversationService", code: 403, userInfo: [NSLocalizedDescriptionKey: "Only admins can change group photo"])
+        }
+        
+        try await conversationRef.updateData([
+            "groupPhotoURL": imageURL,
+            "updatedAt": Date()
+        ])
+    }
+    
+    /// Fetch all group members with their details
+    func fetchGroupMembers(conversationId: String) async throws -> [User] {
+        let conversationRef = db.collection("conversations").document(conversationId)
+        let conversationDoc = try await conversationRef.getDocument()
+        
+        guard let conversation = try? conversationDoc.data(as: Conversation.self) else {
+            throw NSError(domain: "ConversationService", code: 404, userInfo: [NSLocalizedDescriptionKey: "Conversation not found"])
+        }
+        
+        var members: [User] = []
+        for userId in conversation.participants {
+            let userDoc = try await db.collection("users").document(userId).getDocument()
+            if let user = try? userDoc.data(as: User.self) {
+                members.append(user)
+            }
+        }
+        
+        return members
+    }
 }
 

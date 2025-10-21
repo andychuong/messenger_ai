@@ -476,5 +476,72 @@ class MessageService: ObservableObject {
             "threadCount": count
         ])
     }
+    
+    // MARK: - Phase 4.5: System Messages for Group Events
+    
+    /// Send a system message (e.g., "Alice added Bob", "Charlie left the group")
+    func sendSystemMessage(conversationId: String, text: String) async throws -> Message {
+        // Create system message - no sender required
+        var message = Message(
+            id: nil,
+            conversationId: conversationId,
+            senderId: "system",
+            senderName: "System",
+            text: text,
+            timestamp: Date(),
+            status: .sent,
+            type: .system
+        )
+        
+        // Save to Firestore
+        let messageRef = db.collection("conversations")
+            .document(conversationId)
+            .collection("messages")
+        
+        let docRef = try await messageRef.addDocument(data: try Firestore.Encoder().encode(message))
+        
+        // Update message with ID
+        message.id = docRef.documentID
+        
+        // Note: Don't update conversation's lastMessage for system messages
+        // to avoid cluttering the conversation list
+        
+        return message
+    }
+    
+    /// Helper: Send "member added" system message
+    @discardableResult
+    func sendMemberAddedMessage(conversationId: String, addedByName: String, addedUserName: String) async throws -> Message {
+        let text = "\(addedByName) added \(addedUserName) to the group"
+        return try await sendSystemMessage(conversationId: conversationId, text: text)
+    }
+    
+    /// Helper: Send "member left" system message
+    @discardableResult
+    func sendMemberLeftMessage(conversationId: String, userName: String) async throws -> Message {
+        let text = "\(userName) left the group"
+        return try await sendSystemMessage(conversationId: conversationId, text: text)
+    }
+    
+    /// Helper: Send "member removed" system message
+    @discardableResult
+    func sendMemberRemovedMessage(conversationId: String, removedByName: String, removedUserName: String) async throws -> Message {
+        let text = "\(removedByName) removed \(removedUserName) from the group"
+        return try await sendSystemMessage(conversationId: conversationId, text: text)
+    }
+    
+    /// Helper: Send "group name changed" system message
+    @discardableResult
+    func sendGroupNameChangedMessage(conversationId: String, changedByName: String, newName: String) async throws -> Message {
+        let text = "\(changedByName) changed the group name to \"\(newName)\""
+        return try await sendSystemMessage(conversationId: conversationId, text: text)
+    }
+    
+    /// Helper: Send "group created" system message
+    @discardableResult
+    func sendGroupCreatedMessage(conversationId: String, creatorName: String) async throws -> Message {
+        let text = "\(creatorName) created the group"
+        return try await sendSystemMessage(conversationId: conversationId, text: text)
+    }
 }
 

@@ -19,6 +19,12 @@ struct Conversation: Identifiable, Codable, Hashable {
     var createdAt: Date
     var updatedAt: Date
     
+    // Phase 4.5: Group chat properties
+    var groupName: String?
+    var groupPhotoURL: String?
+    var admins: [String]?  // Array of user IDs who are admins
+    var createdBy: String?  // User ID of the creator
+    
     enum CodingKeys: String, CodingKey {
         case id
         case participants
@@ -29,6 +35,10 @@ struct Conversation: Identifiable, Codable, Hashable {
         case unreadCount
         case createdAt
         case updatedAt
+        case groupName
+        case groupPhotoURL
+        case admins
+        case createdBy
     }
 }
 
@@ -76,13 +86,27 @@ extension Conversation {
     // Get conversation title (other person's name or group name)
     func title(currentUserId: String) -> String {
         if type == .group {
-            // For group chats, show all participant names
+            // Use group name if available, otherwise show participant names
+            if let groupName = groupName, !groupName.isEmpty {
+                return groupName
+            }
+            // Fallback: show all participant names
             let names = participantDetails.values.map { $0.name }
             return names.joined(separator: ", ")
         } else {
             // For direct chats, show other person's name
             return otherParticipantDetails(currentUserId: currentUserId)?.name ?? "Unknown"
         }
+    }
+    
+    // Check if user is admin
+    func isAdmin(userId: String) -> Bool {
+        return admins?.contains(userId) ?? false
+    }
+    
+    // Get member count
+    var memberCount: Int {
+        return participants.count
     }
     
     // Get unread count for current user

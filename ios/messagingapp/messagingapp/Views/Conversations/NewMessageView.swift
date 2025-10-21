@@ -16,6 +16,7 @@ struct NewMessageView: View {
     @State private var isCreatingConversation = false
     @State private var selectedConversation: Conversation?
     @State private var navigateToChat = false
+    @State private var showingCreateGroup = false  // Phase 4.5
     
     var body: some View {
         NavigationStack {
@@ -50,15 +51,14 @@ struct NewMessageView: View {
                 await friendsViewModel.loadFriends()
             }
             .navigationDestination(isPresented: $navigateToChat) {
-                if let conversation = selectedConversation,
-                   let conversationId = conversation.id,
-                   let currentUserId = conversationViewModel.currentUserId,
-                   let otherUserId = conversation.otherParticipantId(currentUserId: currentUserId) {
-                    ChatView(
-                        conversationId: conversationId,
-                        otherUserId: otherUserId,
-                        otherUserName: conversation.title(currentUserId: currentUserId)
-                    )
+                if let conversation = selectedConversation {
+                    ChatView(conversation: conversation)
+                }
+            }
+            .sheet(isPresented: $showingCreateGroup) {
+                CreateGroupView { conversation in
+                    selectedConversation = conversation
+                    navigateToChat = true
                 }
             }
         }
@@ -68,45 +68,28 @@ struct NewMessageView: View {
     
     private var friendsList: some View {
         List {
-            ForEach(filteredFriends, id: \.0.id) { friendship, user in
+            // Phase 4.5: Create Group Button
+            Section {
                 Button {
-                    Task {
-                        await openChat(with: user)
-                    }
+                    showingCreateGroup = true
                 } label: {
                     HStack(spacing: 12) {
-                        // Profile picture
-                        ZStack(alignment: .bottomTrailing) {
-                            Circle()
-                                .fill(Color.blue.opacity(0.2))
-                                .frame(width: 50, height: 50)
-                                .overlay(
-                                    Text(user.displayName.prefix(1).uppercased())
-                                        .font(.title3)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.blue)
-                                )
-                            
-                            // Online status
-                            if user.status == .online {
-                                Circle()
-                                    .fill(Color.green)
-                                    .frame(width: 14, height: 14)
-                                    .overlay(
-                                        Circle()
-                                            .stroke(Color.white, lineWidth: 2)
-                                    )
-                            }
-                        }
+                        Circle()
+                            .fill(Color.blue.opacity(0.2))
+                            .frame(width: 50, height: 50)
+                            .overlay(
+                                Image(systemName: "person.3.fill")
+                                    .font(.title3)
+                                    .foregroundColor(.blue)
+                            )
                         
-                        // User details
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(user.displayName)
+                            Text("Create Group")
                                 .font(.headline)
-                                .foregroundColor(.primary)
+                                .foregroundColor(.blue)
                             
-                            Text(user.email)
-                                .font(.subheadline)
+                            Text("Start a group conversation")
+                                .font(.caption)
                                 .foregroundColor(.secondary)
                         }
                         
@@ -118,6 +101,63 @@ struct NewMessageView: View {
                     }
                     .padding(.vertical, 4)
                 }
+            }
+            
+            // Direct message friends list
+            Section {
+                ForEach(filteredFriends, id: \.0.id) { friendship, user in
+                    Button {
+                        Task {
+                            await openChat(with: user)
+                        }
+                    } label: {
+                        HStack(spacing: 12) {
+                            // Profile picture
+                            ZStack(alignment: .bottomTrailing) {
+                                Circle()
+                                    .fill(Color.blue.opacity(0.2))
+                                    .frame(width: 50, height: 50)
+                                    .overlay(
+                                        Text(user.displayName.prefix(1).uppercased())
+                                            .font(.title3)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.blue)
+                                    )
+                                
+                                // Online status
+                                if user.status == .online {
+                                    Circle()
+                                        .fill(Color.green)
+                                        .frame(width: 14, height: 14)
+                                        .overlay(
+                                            Circle()
+                                                .stroke(Color.white, lineWidth: 2)
+                                        )
+                                }
+                            }
+                            
+                            // User details
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(user.displayName)
+                                    .font(.headline)
+                                    .foregroundColor(.primary)
+                                
+                                Text(user.email)
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            Spacer()
+                            
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+            } header: {
+                Text("Friends")
             }
         }
         .listStyle(.plain)

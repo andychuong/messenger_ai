@@ -48,19 +48,13 @@ struct ConversationListView: View {
         List {
             ForEach(viewModel.filteredConversations) { conversation in
                 NavigationLink {
-                    if let currentUserId = viewModel.currentUserId,
-                       let otherUserId = conversation.otherParticipantId(currentUserId: currentUserId) {
-                        ChatView(
-                            conversationId: conversation.id ?? "",
-                            otherUserId: otherUserId,
-                            otherUserName: conversation.title(currentUserId: currentUserId)
-                        )
+                    // Phase 4.5: Use conversation-based initializer for both direct and group chats
+                    ChatView(conversation: conversation)
                         .onAppear {
                             Task {
                                 await viewModel.markAsRead(conversation)
                             }
                         }
-                    }
                 } label: {
                     ConversationRow(conversation: conversation, currentUserId: viewModel.currentUserId ?? "")
                 }
@@ -127,20 +121,28 @@ struct ConversationRow: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            // Profile picture
+            // Profile picture - Phase 4.5: Different icon for groups
             ZStack(alignment: .bottomTrailing) {
                 Circle()
                     .fill(Color.blue.opacity(0.2))
                     .frame(width: 56, height: 56)
                     .overlay(
-                        Text(conversation.title(currentUserId: currentUserId).prefix(1).uppercased())
-                            .font(.title2)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.blue)
+                        Group {
+                            if conversation.type == .group {
+                                Image(systemName: "person.3.fill")
+                                    .font(.title3)
+                                    .foregroundColor(.blue)
+                            } else {
+                                Text(conversation.title(currentUserId: currentUserId).prefix(1).uppercased())
+                                    .font(.title2)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.blue)
+                            }
+                        }
                     )
                 
-                // Online status indicator
-                if otherUser?.status == "online" {
+                // Online status indicator (only for direct chats)
+                if conversation.type == .direct && otherUser?.status == "online" {
                     Circle()
                         .fill(Color.green)
                         .frame(width: 16, height: 16)
@@ -168,11 +170,19 @@ struct ConversationRow: View {
                 }
                 
                 HStack {
+                    // Phase 4.5: Show sender name in group last messages
                     if let lastMessage = conversation.lastMessage {
-                        Text(lastMessage.text)
-                            .font(.subheadline)
-                            .foregroundColor(.gray)
-                            .lineLimit(2)
+                        if conversation.type == .group {
+                            Text("\(lastMessage.senderName): \(lastMessage.text)")
+                                .font(.subheadline)
+                                .foregroundColor(.gray)
+                                .lineLimit(2)
+                        } else {
+                            Text(lastMessage.text)
+                                .font(.subheadline)
+                                .foregroundColor(.gray)
+                                .lineLimit(2)
+                        }
                     } else {
                         Text("No messages yet")
                             .font(.subheadline)

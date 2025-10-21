@@ -10,6 +10,7 @@ import SwiftUI
 struct MessageRow: View {
     let message: Message
     let currentUserId: String
+    var isGroupChat: Bool = false  // Phase 4.5: Show sender names in groups
     var showThreadIndicators: Bool = true  // Show thread badges by default
     let onDelete: () -> Void
     let onReact: (String) -> Void
@@ -24,7 +25,22 @@ struct MessageRow: View {
         message.senderId == currentUserId
     }
     
+    private var isSystemMessage: Bool {
+        message.type == .system
+    }
+    
     var body: some View {
+        // Phase 4.5: System messages have special formatting
+        if isSystemMessage {
+            systemMessageView
+        } else {
+            regularMessageView
+        }
+    }
+    
+    // MARK: - Regular Message View
+    
+    private var regularMessageView: some View {
         HStack {
             if isSentByMe {
                 Spacer(minLength: 60)
@@ -70,16 +86,36 @@ struct MessageRow: View {
         }
     }
     
+    // MARK: - System Message View (Phase 4.5)
+    
+    private var systemMessageView: some View {
+        HStack {
+            Spacer()
+            Text(message.text)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color(.systemGray6))
+                .cornerRadius(12)
+            Spacer()
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 4)
+    }
+    
     // MARK: - Message Bubble
     
     private var messageBubble: some View {
         VStack(alignment: isSentByMe ? .trailing : .leading, spacing: 4) {
-            // Sender name (for received messages)
-            if !isSentByMe {
+            // Phase 4.5: Show sender name in group chats
+            // For received messages, always show name
+            // For sent messages in groups, also show name
+            if isGroupChat || !isSentByMe {
                 Text(message.senderName)
                     .font(.caption)
                     .fontWeight(.semibold)
-                    .foregroundColor(.gray)
+                    .foregroundColor(isSentByMe ? .blue : .gray)
                     .padding(.leading, 12)
             }
             
@@ -316,10 +352,30 @@ struct MessageRow: View {
             
             // Status indicators (for sent messages)
             if isSentByMe {
-                statusIndicator
+                // Phase 4.5: Show read count for groups, checkmarks for direct chats
+                if isGroupChat && message.status == .read {
+                    readCountIndicator
+                } else {
+                    statusIndicator
+                }
             }
         }
         .padding(.horizontal, 12)
+    }
+    
+    // MARK: - Read Count Indicator (for groups)
+    
+    private var readCountIndicator: some View {
+        Group {
+            if let readBy = message.readBy, !readBy.isEmpty {
+                Text("Read by \(readBy.count)")
+                    .font(.caption2)
+                    .foregroundColor(.blue)
+            } else {
+                // Fallback to checkmarks if no read receipts yet
+                statusIndicator
+            }
+        }
     }
     
     // MARK: - Status Indicator
