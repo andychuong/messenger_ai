@@ -195,7 +195,7 @@ export const onFriendRequestUpdated = functions.firestore
  * HTTP function to manually send a friend request notification
  * Useful for testing and debugging
  */
-export const sendFriendRequestNotification = functions.https.onCall(
+export const sendFriendRequestNotificationManual = functions.https.onCall(
   async (data, context) => {
     // Check authentication
     if (!context.auth) {
