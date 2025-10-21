@@ -704,7 +704,97 @@ Implementation:
   - [ ] Tap to open thread
 - [ ] Update `ChatViewModel` to handle threads
 
-### Phase 5: Voice/Video Calling (Days 11-13)
+### Phase 4.5: Group Chat (Days 10.5-11.5)
+
+#### 4.5.1 Group Chat Data & Services
+- [ ] Update `ConversationService.swift` for groups
+  - [ ] `createGroupConversation(memberIds:groupName:)` - Create new group
+  - [ ] `addMembersToGroup(conversationId:userIds:)` - Add members
+  - [ ] `removeMemberFromGroup(conversationId:userId:)` - Remove member
+  - [ ] `leaveGroup(conversationId:)` - Leave group
+  - [ ] `updateGroupName(conversationId:name:)` - Rename group
+  - [ ] `updateGroupPhoto(conversationId:imageURL:)` - Set group avatar
+  - [ ] `fetchGroupMembers(conversationId:)` - Get all members
+- [ ] Update `MessageService.swift` for groups
+  - [ ] Handle multi-participant message delivery
+  - [ ] Group-aware read receipts (show count, not names)
+  - [ ] System messages (member joined/left, name changed)
+
+#### 4.5.2 Create Group UI
+- [ ] Build `CreateGroupView.swift`
+  - [ ] "Create Group" button in NewMessageView
+  - [ ] Multi-select friend picker
+  - [ ] Selected members display (chips)
+  - [ ] Group name input (optional)
+  - [ ] Group photo picker (optional)
+  - [ ] "Create" button with validation
+  - [ ] Loading state during creation
+- [ ] Create `GroupMemberSelectionView.swift`
+  - [ ] List of friends with checkboxes
+  - [ ] Search bar
+  - [ ] "Select All" / "Deselect All"
+  - [ ] Selected count indicator
+  - [ ] Minimum 2 members validation
+
+#### 4.5.3 Group Info & Management
+- [ ] Build `GroupInfoView.swift`
+  - [ ] Group photo and name at top
+  - [ ] "Edit" button for admins
+  - [ ] List of all members with roles
+  - [ ] "Add Members" button
+  - [ ] "Leave Group" button (red)
+  - [ ] Media/Links/Docs tabs (future)
+- [ ] Build `EditGroupView.swift`
+  - [ ] Edit group name
+  - [ ] Change group photo
+  - [ ] Member management
+  - [ ] "Save" button
+- [ ] Build `AddGroupMembersView.swift`
+  - [ ] Friend selection (existing members excluded)
+  - [ ] "Add" button
+  - [ ] Show who added whom in chat
+
+#### 4.5.4 Update Chat Interface for Groups
+- [ ] Update `ChatView.swift`
+  - [ ] Show group name in navigation title
+  - [ ] Show member count subtitle ("10 members")
+  - [ ] Tap title to open GroupInfoView
+  - [ ] Disable 1-on-1 call buttons (or add group call later)
+- [ ] Update `ConversationListView.swift`
+  - [ ] Show group avatar (or member avatars)
+  - [ ] Show last sender name in preview
+  - [ ] "Group" indicator if needed
+- [ ] Update `MessageRow.swift`
+  - [ ] Show sender name for ALL messages in groups
+  - [ ] Group message bubble styling
+  - [ ] Read receipts: show count ("Read by 5")
+
+#### 4.5.5 Group-Specific Features
+- [ ] System messages
+  - [ ] "Alice added Bob to the group"
+  - [ ] "Charlie left the group"
+  - [ ] "Alice changed the group name"
+  - [ ] Display as centered, gray text
+- [ ] Group notifications
+  - [ ] Update Cloud Function for group messages
+  - [ ] Notification: "Alice in Study Group: Hey everyone!"
+  - [ ] Mute group option (future)
+- [ ] Group roles (optional MVP)
+  - [ ] Creator is admin by default
+  - [ ] Admins can add/remove members
+  - [ ] Admins can change group info
+  - [ ] Members can only leave
+
+#### 4.5.6 Firestore Rules for Groups
+- [ ] Update security rules
+  - [ ] Only members can read group messages
+  - [ ] Only members can send messages
+  - [ ] Only admins can modify group
+  - [ ] Anyone can leave group
+
+### Phase 5: Voice/Video Calling (Days 12-14)
+
+**Note:** Voice/Video calling starts with 1-on-1 calls. Group calling can be added later.
 
 #### 5.1 WebRTC Setup
 - [ ] Add WebRTC framework to project
@@ -769,7 +859,7 @@ Implementation:
   - [ ] Missed call indicator
   - [ ] Tap to call back
 
-### Phase 6: Security & Encryption (Days 14-15)
+### Phase 6: Security & Encryption (Days 15-16)
 
 #### 6.1 End-to-End Encryption
 - [ ] Build `EncryptionService.swift`
@@ -807,7 +897,7 @@ Implementation:
 - [ ] Enable App Transport Security
 - [ ] Obfuscate API keys in Cloud Functions
 
-### Phase 7: AI Features - Translation (Days 16-17)
+### Phase 7: AI Features - Translation (Days 17-18)
 
 #### 7.1 Translation Service
 - [ ] Create Cloud Function `translateMessage`
@@ -837,7 +927,7 @@ Implementation:
 - [ ] Add loading indicator during translation
 - [ ] Handle translation errors
 
-### Phase 8: AI Features - RAG & Conversation Intelligence (Days 18-21)
+### Phase 8: AI Features - RAG & Conversation Intelligence (Days 19-22)
 
 #### 8.1 Embedding Pipeline
 - [ ] Create Cloud Function `generateEmbedding`
@@ -910,7 +1000,7 @@ Implementation:
   - [ ] Filter/sort by priority
 - [ ] Create "Priority Messages" inbox view
 
-### Phase 9: AI Chat Assistant (Days 22-24)
+### Phase 9: AI Chat Assistant (Days 23-25)
 
 #### 9.1 AI Assistant Backend
 - [ ] Create Cloud Function `chatWithAssistant`
@@ -967,7 +1057,7 @@ Implementation:
   - [ ] Maintain state between queries
   - [ ] Reference previous answers
 
-### Phase 10: Push Notifications (Day 25)
+### Phase 10: Push Notifications (Day 26)
 
 #### 10.1 Push Notification Setup
 - [ ] Configure APNs in Apple Developer account
@@ -1011,7 +1101,7 @@ Implementation:
   - [ ] Mark as read action
   - [ ] Accept/decline call actions
 
-### Phase 11: Offline Support & Sync (Day 26)
+### Phase 11: Offline Support & Sync (Day 27)
 
 #### 11.1 Offline Messaging
 - [ ] Implement message queue
@@ -1047,7 +1137,7 @@ Implementation:
   - [ ] Batch operations
   - [ ] Prioritize active conversations
 
-### Phase 12: Polish & UX Improvements (Days 27-28)
+### Phase 12: Polish & UX Improvements (Days 28-29)
 
 #### 12.1 UI/UX Polish
 - [ ] Design app icon
@@ -1120,7 +1210,7 @@ Implementation:
   - [ ] Efficient sync strategy
   - [ ] Background task management
 
-### Phase 13: Testing (Days 29-30)
+### Phase 13: Testing (Days 30-31)
 
 #### 13.1 Unit Tests
 - [ ] Test ViewModels
@@ -1170,7 +1260,7 @@ Implementation:
 - [ ] Test authentication edge cases
 - [ ] Check for data leaks
 
-### Phase 14: Deployment & Documentation (Days 31-32)
+### Phase 14: Deployment & Documentation (Days 32-33)
 
 #### 14.1 App Store Preparation
 - [ ] Create App Store Connect listing
@@ -1231,6 +1321,7 @@ Implementation:
 | 2 | 2 | Friends system |
 | 3 | 3 | Core messaging |
 | 4 | 3 | Rich messaging features |
+| 4.5 | 1 | **Group chat** |
 | 5 | 3 | Voice/video calling |
 | 6 | 2 | Security & encryption |
 | 7 | 2 | Translation AI |
@@ -1241,9 +1332,9 @@ Implementation:
 | 12 | 2 | Polish & UX |
 | 13 | 2 | Testing |
 | 14 | 2 | Deployment & docs |
-| **Total** | **32 days** | |
+| **Total** | **33 days** | |
 
-*Note: Timeline can be adjusted based on priorities. MVP (Phases 1-3) can be completed in 7-10 days.*
+*Note: Timeline can be adjusted based on priorities. MVP (Phases 1-4.5) can be completed in 8-12 days and includes full messaging with groups.*
 
 ---
 
@@ -1371,7 +1462,7 @@ Implementation:
 ---
 
 **Document Status:** Ready for Implementation  
-**Last Updated:** October 20, 2025  
-**Version:** 1.0
+**Last Updated:** October 21, 2025  
+**Version:** 1.1 - Added Phase 4.5: Group Chat
 
 

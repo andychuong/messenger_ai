@@ -10,6 +10,9 @@ import SwiftUI
 struct ChatView: View {
     @StateObject private var viewModel: ChatViewModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var selectedMessageForThread: Message?
+    @State private var shouldScrollToBottom = false
     
     init(conversationId: String, otherUserId: String, otherUserName: String) {
         _viewModel = StateObject(wrappedValue: ChatViewModel(
@@ -32,7 +35,18 @@ struct ChatView: View {
                         await viewModel.sendMessage()
                     }
                 },
-                isSending: viewModel.isSending
+                isSending: viewModel.isSending,
+                isEditing: viewModel.isEditingMessage,
+                editingMessageText: viewModel.editingMessage?.text ?? "",
+                onCancelEdit: {
+                    viewModel.cancelEditing()
+                },
+                onImagePick: {
+                    viewModel.showingImagePicker = true
+                },
+                onVoiceRecord: {
+                    viewModel.showingVoiceRecorder = true
+                }
             )
         }
         .navigationTitle(viewModel.otherUserName)
@@ -62,6 +76,40 @@ struct ChatView: View {
             viewModel.setupRealtimeListeners()
             Task {
                 await viewModel.loadMessages()
+            }
+        }
+        .navigationDestination(item: $selectedMessageForThread) { message in
+            if let currentUserId = viewModel.currentUserId {
+                ThreadView(
+                    parentMessage: message,
+                    conversationId: viewModel.conversationId,
+                    currentUserId: currentUserId
+                )
+            }
+        }
+        .sheet(isPresented: $viewModel.showingImagePicker) {
+            ImagePicker(image: $viewModel.selectedImage, isPresented: $viewModel.showingImagePicker)
+        }
+        .fullScreenCover(isPresented: $viewModel.showingVoiceRecorder) {
+            VoiceRecorderView(
+                voiceService: viewModel.voiceService,
+                onSend: {
+                    Task {
+                        await viewModel.sendVoiceMessage()
+                    }
+                },
+                onCancel: {
+                    viewModel.voiceService.cancelRecording()
+                    viewModel.showingVoiceRecorder = false
+                }
+            )
+        }
+        .onChange(of: viewModel.selectedImage) { _, newImage in
+            if let image = newImage {
+                Task {
+                    await viewModel.sendImageMessage(image)
+                    viewModel.selectedImage = nil
+                }
             }
         }
         .alert("Error", isPresented: .constant(viewModel.errorMessage != nil)) {
@@ -107,28 +155,67 @@ struct ChatView: View {
                                         Task {
                                             await viewModel.addReaction(to: message, emoji: emoji)
                                         }
+                                    },
+                                    onEdit: {
+                                        viewModel.startEditing(message)
+                                    },
+                                    onReplyInThread: {
+                                        // If this is a thread reply, navigate to the parent thread
+                                        if let parentId = message.replyTo {
+                                            // Find the parent message
+                                            if let parentMessage = viewModel.messages.first(where: { $0.id == parentId }) {
+                                                selectedMessageForThread = parentMessage
+                                            }
+                                        } else {
+                                            // This is a parent message, navigate to its thread
+                                            selectedMessageForThread = message
+                                        }
                                     }
                                 )
                                 .id(message.id)
                             }
                         }
+                        
+                        // Invisible anchor at the very bottom
+                        Color.clear
+                            .frame(height: 1)
+                            .id("bottom")
                     }
                 }
                 .padding(.top, 8)
             }
+            .defaultScrollAnchor(.bottom)
             .onChange(of: viewModel.messages.count) { _, _ in
                 // Scroll to bottom when new message arrives
-                if let lastMessage = viewModel.messages.last {
-                    withAnimation {
-                        scrollProxy.scrollTo(lastMessage.id, anchor: .bottom)
-                    }
+                scrollToBottom(scrollProxy)
+            }
+            .onChange(of: shouldScrollToBottom) { _, newValue in
+                // Scroll to bottom when returning from thread
+                if newValue {
+                    scrollToBottom(scrollProxy)
+                    shouldScrollToBottom = false
                 }
             }
-            .onAppear {
-                // Scroll to bottom on initial load
-                if let lastMessage = viewModel.messages.last {
-                    scrollProxy.scrollTo(lastMessage.id, anchor: .bottom)
+            .onChange(of: selectedMessageForThread) { oldValue, newValue in
+                // When returning from thread (newValue becomes nil)
+                if oldValue != nil && newValue == nil {
+                    shouldScrollToBottom = true
                 }
+            }
+            .task {
+                // Scroll to bottom on initial load with delay
+                try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+                scrollToBottom(scrollProxy)
+            }
+        }
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func scrollToBottom(_ scrollProxy: ScrollViewProxy) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            withAnimation(.easeOut(duration: 0.3)) {
+                scrollProxy.scrollTo("bottom", anchor: .bottom)
             }
         }
     }

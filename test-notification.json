@@ -1,0 +1,17 @@
+{
+  "Simulator Target Bundle": "com.andychuong.messagingapp",
+  "aps": {
+    "alert": {
+      "title": "New Message",
+      "subtitle": "Alice",
+      "body": "Hey! How are you doing?"
+    },
+    "badge": 1,
+    "sound": "default",
+    "category": "MESSAGE_CATEGORY"
+  },
+  "conversationId": "test123",
+  "senderId": "user1",
+  "senderName": "Alice"
+}
+

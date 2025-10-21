@@ -20,8 +20,21 @@ class ChatViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var conversation: Conversation?
     
+    // Edit mode
+    @Published var isEditingMessage = false
+    @Published var editingMessage: Message?
+    
+    // Image picking
+    @Published var showingImagePicker = false
+    @Published var selectedImage: UIImage?
+    
+    // Voice recording
+    @Published var showingVoiceRecorder = false
+    let voiceService = VoiceRecordingService()
+    
     private let messageService = MessageService()
     private let conversationService = ConversationService()
+    private let imageService = ImageService()
     private var messagesListener: ListenerRegistration?
     private var conversationListener: ListenerRegistration?
     
@@ -93,6 +106,12 @@ class ChatViewModel: ObservableObject {
             return
         }
         
+        // Check if we're editing or sending new message
+        if isEditingMessage, let message = editingMessage {
+            await updateEditedMessage(message)
+            return
+        }
+        
         let textToSend = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
         messageText = ""  // Clear input immediately for better UX
         
@@ -144,6 +163,45 @@ class ChatViewModel: ObservableObject {
     }
     
     // MARK: - Edit Message
+    
+    func startEditing(_ message: Message) {
+        isEditingMessage = true
+        editingMessage = message
+        messageText = message.text
+    }
+    
+    func cancelEditing() {
+        isEditingMessage = false
+        editingMessage = nil
+        messageText = ""
+    }
+    
+    private func updateEditedMessage(_ message: Message) async {
+        guard let messageId = message.id else { return }
+        
+        let newText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // Clear edit mode
+        isEditingMessage = false
+        editingMessage = nil
+        messageText = ""
+        
+        isSending = true
+        errorMessage = nil
+        
+        do {
+            try await messageService.editMessage(
+                messageId: messageId,
+                conversationId: conversationId,
+                newText: newText
+            )
+        } catch {
+            errorMessage = "Failed to update message: \(error.localizedDescription)"
+            print("Error editing message: \(error)")
+        }
+        
+        isSending = false
+    }
     
     func editMessage(_ message: Message, newText: String) async {
         guard let messageId = message.id else { return }
@@ -219,6 +277,66 @@ class ChatViewModel: ObservableObject {
             formatter.dateStyle = .medium
             return formatter.string(from: message.timestamp)
         }
+    }
+    
+    // MARK: - Image Messages
+    
+    func sendImageMessage(_ image: UIImage) async {
+        isSending = true
+        errorMessage = nil
+        
+        do {
+            let message = try await imageService.sendImageMessage(
+                image: image,
+                conversationId: conversationId
+            )
+            
+            // Optimistically add to local array
+            if !messages.contains(where: { $0.id == message.id }) {
+                messages.append(message)
+            }
+        } catch {
+            errorMessage = "Failed to send image: \(error.localizedDescription)"
+            print("Error sending image: \(error)")
+        }
+        
+        isSending = false
+    }
+    
+    // MARK: - Voice Messages
+    
+    func sendVoiceMessage() async {
+        guard let recordingURL = voiceService.recordingURL else {
+            errorMessage = "No recording available"
+            return
+        }
+        
+        let duration = voiceService.recordingDuration
+        
+        isSending = true
+        errorMessage = nil
+        showingVoiceRecorder = false
+        
+        do {
+            let message = try await voiceService.sendVoiceMessage(
+                fileURL: recordingURL,
+                conversationId: conversationId,
+                duration: duration
+            )
+            
+            // Optimistically add to local array
+            if !messages.contains(where: { $0.id == message.id }) {
+                messages.append(message)
+            }
+            
+            // Reset voice service
+            voiceService.cancelRecording()
+        } catch {
+            errorMessage = "Failed to send voice message: \(error.localizedDescription)"
+            print("Error sending voice: \(error)")
+        }
+        
+        isSending = false
     }
 }
 

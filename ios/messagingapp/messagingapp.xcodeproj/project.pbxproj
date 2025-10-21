@@ -430,6 +430,7 @@
 				CODE_SIGN_ENTITLEMENTS = messagingapp/messagingapp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = D2D425BD4B;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = messagingapp/Info.plist;
@@ -467,6 +468,7 @@
 				CODE_SIGN_ENTITLEMENTS = messagingapp/messagingapp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = D2D425BD4B;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = messagingapp/Info.plist;

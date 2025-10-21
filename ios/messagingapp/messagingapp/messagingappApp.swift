@@ -12,6 +12,9 @@ import FirebaseCore
 @main
 struct messagingappApp: App {
     
+    // AppDelegate for handling notifications
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    
     // Auth service (shared across app)
     @StateObject private var authService = AuthService()
     

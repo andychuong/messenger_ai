@@ -20,7 +20,12 @@ class AuthService: ObservableObject {
     private let db = Firestore.firestore()
     private var authStateHandle: AuthStateDidChangeListenerHandle?
     
+    // Shared instance for NotificationService to access
+    static var shared: AuthService?
+    
     init() {
+        Self.shared = self
+        
         // Listen for auth state changes
         authStateHandle = auth.addStateDidChangeListener { [weak self] _, user in
             Task { @MainActor in
@@ -54,16 +59,29 @@ class AuthService: ObservableObject {
         
         // Fetch user data
         await fetchUserData(userId: result.user.uid)
+        
+        // Request notification permission and save FCM token
+        await setupNotifications(userId: result.user.uid)
     }
     
     // MARK: - Login
     func login(email: String, password: String) async throws {
         let result = try await auth.signIn(withEmail: email, password: password)
         await fetchUserData(userId: result.user.uid)
+        
+        // Request notification permission and save FCM token
+        await setupNotifications(userId: result.user.uid)
     }
     
     // MARK: - Logout
     func logout() throws {
+        // Remove FCM token from Firestore before logout
+        if let userId = currentUser?.id {
+            Task {
+                await NotificationService.shared.removeTokenFromFirestore(userId: userId)
+            }
+        }
+        
         try auth.signOut()
         currentUser = nil
         isAuthenticated = false
@@ -112,6 +130,21 @@ class AuthService: ObservableObject {
     // MARK: - Reset Password
     func resetPassword(email: String) async throws {
         try await auth.sendPasswordReset(withEmail: email)
+    }
+    
+    // MARK: - Notification Setup
+    
+    private func setupNotifications(userId: String) async {
+        // Request notification permission
+        let granted = await NotificationService.shared.requestPermission()
+        
+        if granted {
+            // Wait a moment for FCM token to be received
+            try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+            
+            // Save FCM token to Firestore
+            await NotificationService.shared.saveTokenToFirestore(userId: userId)
+        }
     }
 }
 

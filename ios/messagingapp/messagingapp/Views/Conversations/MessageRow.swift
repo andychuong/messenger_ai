@@ -10,10 +10,15 @@ import SwiftUI
 struct MessageRow: View {
     let message: Message
     let currentUserId: String
+    var showThreadIndicators: Bool = true  // Show thread badges by default
     let onDelete: () -> Void
     let onReact: (String) -> Void
+    var onEdit: (() -> Void)? = nil
+    var onReplyInThread: (() -> Void)? = nil
     
     @State private var showingActionMenu = false
+    @State private var showingEmojiPicker = false
+    @StateObject private var voiceService = VoiceRecordingService()
     
     private var isSentByMe: Bool {
         message.senderId == currentUserId
@@ -26,12 +31,22 @@ struct MessageRow: View {
             }
             
             VStack(alignment: isSentByMe ? .trailing : .leading, spacing: 4) {
+                // Thread reply indicator (if this is a reply in a thread)
+                if showThreadIndicators && message.replyTo != nil {
+                    threadReplyBadge
+                }
+                
                 // Message bubble
                 messageBubble
                 
                 // Reactions
                 if message.hasReactions {
                     reactionsView
+                }
+                
+                // Thread indicator (if this message has replies)
+                if showThreadIndicators, let threadCount = message.threadCount, threadCount > 0 {
+                    threadIndicator(count: threadCount)
                 }
                 
                 // Metadata (time and status)
@@ -46,6 +61,12 @@ struct MessageRow: View {
         .padding(.vertical, 4)
         .contextMenu {
             messageContextMenu
+        }
+        .sheet(isPresented: $showingEmojiPicker) {
+            EmojiReactionPicker(isPresented: $showingEmojiPicker) { emoji in
+                onReact(emoji)
+            }
+            .presentationDetents([.medium, .large])
         }
     }
     
@@ -62,16 +83,26 @@ struct MessageRow: View {
                     .padding(.leading, 12)
             }
             
-            // Message text
-            Text(message.text)
-                .font(.body)
-                .foregroundColor(isSentByMe ? .white : .primary)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(
-                    isSentByMe ? Color.blue : Color(.systemGray5)
-                )
-                .cornerRadius(20)
+            // Image message
+            if message.type == .image, let mediaURL = message.mediaURL {
+                imageMessageView(url: mediaURL, caption: message.text)
+            }
+            // Voice message
+            else if message.type == .voice, let mediaURL = message.mediaURL {
+                voiceMessageView(url: mediaURL, duration: message.voiceDuration ?? 0)
+            }
+            // Text message
+            else if !message.text.isEmpty {
+                Text(message.text)
+                    .font(.body)
+                    .foregroundColor(isSentByMe ? .white : .primary)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(
+                        isSentByMe ? Color.blue : Color(.systemGray5)
+                    )
+                    .cornerRadius(20)
+            }
             
             // Edited indicator
             if message.wasEdited {
@@ -82,6 +113,170 @@ struct MessageRow: View {
                     .padding(.horizontal, 12)
             }
         }
+    }
+    
+    // MARK: - Image Message View
+    
+    @ViewBuilder
+    private func imageMessageView(url: String, caption: String) -> some View {
+        VStack(alignment: isSentByMe ? .trailing : .leading, spacing: 4) {
+            // Image
+            AsyncImage(url: URL(string: url)) { phase in
+                switch phase {
+                case .empty:
+                    ProgressView()
+                        .frame(width: 200, height: 200)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(12)
+                case .success(let image):
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(maxWidth: 250, maxHeight: 300)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                case .failure:
+                    VStack {
+                        Image(systemName: "photo")
+                            .font(.largeTitle)
+                            .foregroundColor(.gray)
+                        Text("Failed to load image")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
+                    .frame(width: 200, height: 200)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(12)
+                @unknown default:
+                    EmptyView()
+                }
+            }
+            
+            // Caption (if exists)
+            if !caption.isEmpty {
+                Text(caption)
+                    .font(.body)
+                    .foregroundColor(isSentByMe ? .white : .primary)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(
+                        isSentByMe ? Color.blue : Color(.systemGray5)
+                    )
+                    .cornerRadius(20)
+            }
+        }
+    }
+    
+    // MARK: - Voice Message View
+    
+    @ViewBuilder
+    private func voiceMessageView(url: String, duration: TimeInterval) -> some View {
+        if let audioURL = URL(string: url) {
+            let isCurrentlyPlaying = voiceService.isPlaying && voiceService.currentlyPlayingURL == audioURL
+            let progress = isCurrentlyPlaying && duration > 0 ? voiceService.playbackProgress / duration : 0
+            
+            HStack(spacing: 12) {
+            // Play/Pause button
+            Button {
+                if isCurrentlyPlaying {
+                    voiceService.pausePlayback()
+                } else {
+                    voiceService.playAudio(from: audioURL)
+                }
+            } label: {
+                Image(systemName: isCurrentlyPlaying ? "pause.fill" : "play.fill")
+                    .font(.title3)
+                    .foregroundColor(isSentByMe ? .white : .blue)
+                    .frame(width: 32, height: 32)
+            }
+            
+            // Waveform / Progress bar
+            VStack(alignment: .leading, spacing: 4) {
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        // Background
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill((isSentByMe ? Color.white : Color.gray).opacity(0.3))
+                            .frame(height: 3)
+                        
+                        // Progress
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(isSentByMe ? Color.white : Color.blue)
+                            .frame(width: geometry.size.width * progress, height: 3)
+                    }
+                }
+                .frame(height: 3)
+                
+                // Duration
+                Text(VoiceRecordingService.formatDuration(isCurrentlyPlaying ? voiceService.playbackProgress : duration))
+                    .font(.caption2)
+                    .foregroundColor(isSentByMe ? .white.opacity(0.8) : .gray)
+            }
+            
+            // Waveform icon
+            Image(systemName: "waveform")
+                .font(.caption)
+                .foregroundColor(isSentByMe ? .white.opacity(0.6) : .gray)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .frame(minWidth: 200)
+            .background(
+                isSentByMe ? Color.blue : Color(.systemGray5)
+            )
+            .cornerRadius(20)
+        } else {
+            Text("Invalid audio URL")
+                .font(.caption)
+                .foregroundColor(.gray)
+        }
+    }
+    
+    // MARK: - Thread Indicator
+    
+    private func threadIndicator(count: Int) -> some View {
+        Button {
+            onReplyInThread?()
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "bubble.left.and.bubble.right")
+                    .font(.caption2)
+                Text("\(count) \(count == 1 ? "reply" : "replies")")
+                    .font(.caption2)
+            }
+            .foregroundColor(.blue)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.blue.opacity(0.1))
+            .cornerRadius(8)
+        }
+        .padding(.horizontal, 12)
+    }
+    
+    // MARK: - Thread Reply Badge
+    
+    private var threadReplyBadge: some View {
+        Button {
+            // Trigger navigation to the parent thread
+            onReplyInThread?()
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "arrowshape.turn.up.left.fill")
+                    .font(.caption2)
+                Text("Thread reply")
+                    .font(.caption2)
+                    .fontWeight(.medium)
+                Image(systemName: "chevron.right")
+                    .font(.caption2)
+                    .fontWeight(.bold)
+            }
+            .foregroundColor(.purple)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Color.purple.opacity(0.1))
+            .cornerRadius(6)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 12)
     }
     
     // MARK: - Reactions View
@@ -166,23 +361,30 @@ struct MessageRow: View {
     
     private var messageContextMenu: some View {
         Group {
-            // React
+            // Quick reactions
             Button {
                 onReact("❤️")
             } label: {
-                Label("❤️ React", systemImage: "heart")
+                Label("❤️", systemImage: "heart")
             }
             
             Button {
                 onReact("👍")
             } label: {
-                Label("👍 React", systemImage: "hand.thumbsup")
+                Label("👍", systemImage: "hand.thumbsup")
             }
             
             Button {
                 onReact("😂")
             } label: {
-                Label("😂 React", systemImage: "face.smiling")
+                Label("😂", systemImage: "face.smiling")
+            }
+            
+            // Full emoji picker
+            Button {
+                showingEmojiPicker = true
+            } label: {
+                Label("More Reactions", systemImage: "face.smiling")
             }
             
             Divider()
@@ -194,9 +396,27 @@ struct MessageRow: View {
                 Label("Copy", systemImage: "doc.on.doc")
             }
             
-            // Delete (only for own messages)
+            // Reply in Thread
+            Button {
+                onReplyInThread?()
+            } label: {
+                Label("Reply in Thread", systemImage: "bubble.left.and.bubble.right")
+            }
+            
+            Divider()
+            
+            // Edit and Delete (only for own messages)
             if isSentByMe {
                 Divider()
+                
+                // Edit (if within time window)
+                if message.canBeEdited() {
+                    Button {
+                        onEdit?()
+                    } label: {
+                        Label("Edit", systemImage: "pencil")
+                    }
+                }
                 
                 Button(role: .destructive) {
                     onDelete()

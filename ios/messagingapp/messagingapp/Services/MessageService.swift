@@ -59,6 +59,101 @@ class MessageService: ObservableObject {
         return sentMessage
     }
     
+    /// Send an image message
+    func sendImageMessage(conversationId: String, imageURL: String, caption: String? = nil) async throws -> Message {
+        guard let currentUser = Auth.auth().currentUser else {
+            throw NSError(domain: "MessageService", code: 401, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
+        }
+        
+        // Fetch current user name
+        let userDoc = try await db.collection("users").document(currentUser.uid).getDocument()
+        guard let userData = userDoc.data(),
+              let displayName = userData["displayName"] as? String else {
+            throw NSError(domain: "MessageService", code: 404, userInfo: [NSLocalizedDescriptionKey: "User data not found"])
+        }
+        
+        // Create image message
+        var message = Message(
+            id: nil,
+            conversationId: conversationId,
+            senderId: currentUser.uid,
+            senderName: displayName,
+            text: caption ?? "",
+            timestamp: Date(),
+            status: .sending,
+            type: .image,
+            mediaURL: imageURL,
+            mediaType: .image
+        )
+        
+        // Save to Firestore
+        let messageRef = db.collection("conversations")
+            .document(conversationId)
+            .collection("messages")
+        
+        let docRef = try await messageRef.addDocument(data: try Firestore.Encoder().encode(message))
+        
+        // Update message status to sent
+        try await docRef.updateData(["status": MessageStatus.sent.rawValue])
+        
+        // Update message with ID
+        message.id = docRef.documentID
+        message.status = MessageStatus.sent
+        
+        // Update conversation's last message
+        try await conversationService.updateLastMessage(conversationId: conversationId, message: message)
+        
+        return message
+    }
+    
+    /// Send a voice message
+    func sendVoiceMessage(conversationId: String, voiceURL: String, duration: TimeInterval) async throws -> Message {
+        guard let currentUser = Auth.auth().currentUser else {
+            throw NSError(domain: "MessageService", code: 401, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
+        }
+        
+        // Fetch current user name
+        let userDoc = try await db.collection("users").document(currentUser.uid).getDocument()
+        guard let userData = userDoc.data(),
+              let displayName = userData["displayName"] as? String else {
+            throw NSError(domain: "MessageService", code: 404, userInfo: [NSLocalizedDescriptionKey: "User data not found"])
+        }
+        
+        // Create voice message
+        var message = Message(
+            id: nil,
+            conversationId: conversationId,
+            senderId: currentUser.uid,
+            senderName: displayName,
+            text: "🎤 Voice message",
+            timestamp: Date(),
+            status: .sending,
+            type: .voice,
+            mediaURL: voiceURL,
+            mediaType: .voice,
+            voiceDuration: duration
+        )
+        
+        // Save to Firestore
+        let messageRef = db.collection("conversations")
+            .document(conversationId)
+            .collection("messages")
+        
+        let docRef = try await messageRef.addDocument(data: try Firestore.Encoder().encode(message))
+        
+        // Update message status to sent
+        try await docRef.updateData(["status": MessageStatus.sent.rawValue])
+        
+        // Update message with ID
+        message.id = docRef.documentID
+        message.status = MessageStatus.sent
+        
+        // Update conversation's last message
+        try await conversationService.updateLastMessage(conversationId: conversationId, message: message)
+        
+        return message
+    }
+    
     // MARK: - Fetch Messages
     
     /// Fetch messages for a conversation with pagination
@@ -274,6 +369,112 @@ class MessageService: ObservableObject {
             }
         
         return listener
+    }
+    
+    // MARK: - Thread Replies
+    
+    /// Send a reply in a thread
+    func sendThreadReply(conversationId: String, parentMessageId: String, text: String) async throws -> Message {
+        guard let currentUser = Auth.auth().currentUser else {
+            throw NSError(domain: "MessageService", code: 401, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
+        }
+        
+        // Fetch current user name
+        let userDoc = try await db.collection("users").document(currentUser.uid).getDocument()
+        guard let userData = userDoc.data(),
+              let displayName = userData["displayName"] as? String else {
+            throw NSError(domain: "MessageService", code: 404, userInfo: [NSLocalizedDescriptionKey: "User data not found"])
+        }
+        
+        // Create message with thread reference
+        var message = Message.create(
+            conversationId: conversationId,
+            senderId: currentUser.uid,
+            senderName: displayName,
+            text: text
+        )
+        message.replyTo = parentMessageId
+        
+        // Save to Firestore
+        let messageRef = db.collection("conversations")
+            .document(conversationId)
+            .collection("messages")
+        
+        let docRef = try await messageRef.addDocument(data: try Firestore.Encoder().encode(message))
+        
+        // Update message status to sent
+        try await docRef.updateData(["status": MessageStatus.sent.rawValue])
+        
+        // Create message with ID
+        var sentMessage = message
+        sentMessage.id = docRef.documentID
+        sentMessage.status = .sent
+        
+        // Update thread count on parent message
+        try await updateThreadCount(conversationId: conversationId, parentMessageId: parentMessageId)
+        
+        return sentMessage
+    }
+    
+    /// Fetch replies for a thread
+    func fetchThreadReplies(conversationId: String, parentMessageId: String, limit: Int = 50) async throws -> [Message] {
+        let snapshot = try await db.collection("conversations")
+            .document(conversationId)
+            .collection("messages")
+            .whereField("replyTo", isEqualTo: parentMessageId)
+            .order(by: "timestamp", descending: false)
+            .limit(to: limit)
+            .getDocuments()
+        
+        let messages = try snapshot.documents.compactMap { document in
+            try document.data(as: Message.self)
+        }
+        
+        return messages
+    }
+    
+    /// Listen to thread replies
+    func listenToThreadReplies(conversationId: String, parentMessageId: String, completion: @escaping ([Message]) -> Void) -> ListenerRegistration? {
+        let listener = db.collection("conversations")
+            .document(conversationId)
+            .collection("messages")
+            .whereField("replyTo", isEqualTo: parentMessageId)
+            .order(by: "timestamp", descending: false)
+            .addSnapshotListener { snapshot, error in
+                guard let documents = snapshot?.documents else {
+                    print("Error fetching thread replies: \(error?.localizedDescription ?? "Unknown error")")
+                    return
+                }
+                
+                let messages = documents.compactMap { document in
+                    try? document.data(as: Message.self)
+                }
+                
+                completion(messages)
+            }
+        
+        return listener
+    }
+    
+    /// Update thread count on parent message
+    private func updateThreadCount(conversationId: String, parentMessageId: String) async throws {
+        let messageRef = db.collection("conversations")
+            .document(conversationId)
+            .collection("messages")
+            .document(parentMessageId)
+        
+        // Count thread replies
+        let repliesSnapshot = try await db.collection("conversations")
+            .document(conversationId)
+            .collection("messages")
+            .whereField("replyTo", isEqualTo: parentMessageId)
+            .getDocuments()
+        
+        let count = repliesSnapshot.documents.count
+        
+        try await messageRef.updateData([
+            "threadCount": count
+        ])
     }
 }
 

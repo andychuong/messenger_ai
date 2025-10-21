@@ -8,7 +8,7 @@
 import Foundation
 import FirebaseFirestore
 
-struct Message: Identifiable, Codable {
+struct Message: Identifiable, Codable, Hashable {
     @DocumentID var id: String?
     var conversationId: String
     var senderId: String
@@ -22,9 +22,11 @@ struct Message: Identifiable, Codable {
     var mediaURL: String?
     var mediaType: MediaType?
     var voiceTranscript: String?
+    var voiceDuration: TimeInterval?  // Duration for voice messages
     var editedAt: Date?
     var originalText: String?
     var replyTo: String?  // messageId for threading
+    var threadCount: Int?  // Number of replies in thread
     var reactions: [String: String]?  // userId -> emoji
     var translations: [String: String]?  // languageCode -> translatedText
     
@@ -44,9 +46,11 @@ struct Message: Identifiable, Codable {
         case mediaURL
         case mediaType
         case voiceTranscript
+        case voiceDuration
         case editedAt
         case originalText
         case replyTo
+        case threadCount
         case reactions
         case translations
         case readBy
@@ -76,12 +80,12 @@ enum MediaType: String, Codable {
     case video
 }
 
-struct ReadReceipt: Codable {
+struct ReadReceipt: Codable, Hashable {
     var userId: String
     var readAt: Date
 }
 
-struct DeliveryReceipt: Codable {
+struct DeliveryReceipt: Codable, Hashable {
     var userId: String
     var deliveredAt: Date
 }
