@@ -22,6 +22,7 @@ admin.initializeApp();
 // Export function modules
 export * from "./messaging/notifications";
 export * from "./messaging/friendships";
+export * from "./messaging/callNotifications";
 export * from "./ai/translation";
 export * from "./ai/assistant";
 export * from "./ai/embeddings";
