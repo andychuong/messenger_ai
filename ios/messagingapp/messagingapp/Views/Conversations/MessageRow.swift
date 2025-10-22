@@ -1,17 +1,10 @@
-//
-//  MessageRow.swift
-//  messagingapp
-//
-//  Phase 3: Core Messaging
-//
-
 import SwiftUI
 
 struct MessageRow: View {
     let message: Message
     let currentUserId: String
-    var isGroupChat: Bool = false  // Phase 4.5: Show sender names in groups
-    var showThreadIndicators: Bool = true  // Show thread badges by default
+    var isGroupChat: Bool = false
+    var showThreadIndicators: Bool = true
     let onDelete: () -> Void
     let onReact: (String) -> Void
     var onEdit: (() -> Void)? = nil
@@ -30,15 +23,12 @@ struct MessageRow: View {
     }
     
     var body: some View {
-        // Phase 4.5: System messages have special formatting
         if isSystemMessage {
             systemMessageView
         } else {
             regularMessageView
         }
     }
-    
-    // MARK: - Regular Message View
     
     private var regularMessageView: some View {
         HStack {
@@ -86,8 +76,6 @@ struct MessageRow: View {
         }
     }
     
-    // MARK: - System Message View (Phase 4.5)
-    
     private var systemMessageView: some View {
         HStack {
             Spacer()
@@ -104,13 +92,8 @@ struct MessageRow: View {
         .padding(.vertical, 4)
     }
     
-    // MARK: - Message Bubble
-    
     private var messageBubble: some View {
         VStack(alignment: isSentByMe ? .trailing : .leading, spacing: 4) {
-            // Phase 4.5: Show sender name in group chats
-            // For received messages, always show name
-            // For sent messages in groups, also show name
             if isGroupChat || !isSentByMe {
                 Text(message.senderName)
                     .font(.caption)
@@ -150,8 +133,6 @@ struct MessageRow: View {
             }
         }
     }
-    
-    // MARK: - Image Message View
     
     @ViewBuilder
     private func imageMessageView(url: String, caption: String) -> some View {
@@ -201,8 +182,6 @@ struct MessageRow: View {
             }
         }
     }
-    
-    // MARK: - Voice Message View
     
     @ViewBuilder
     private func voiceMessageView(url: String, duration: TimeInterval) -> some View {
@@ -267,8 +246,6 @@ struct MessageRow: View {
         }
     }
     
-    // MARK: - Thread Indicator
-    
     private func threadIndicator(count: Int) -> some View {
         Button {
             onReplyInThread?()
@@ -287,8 +264,6 @@ struct MessageRow: View {
         }
         .padding(.horizontal, 12)
     }
-    
-    // MARK: - Thread Reply Badge
     
     private var threadReplyBadge: some View {
         Button {
@@ -315,8 +290,6 @@ struct MessageRow: View {
         .padding(.horizontal, 12)
     }
     
-    // MARK: - Reactions View
-    
     private var reactionsView: some View {
         HStack(spacing: 4) {
             if let reactions = message.reactions {
@@ -341,18 +314,14 @@ struct MessageRow: View {
         .padding(.horizontal, 12)
     }
     
-    // MARK: - Message Metadata
-    
-    private var messageMetadata: some View {
+    private var messageMetadata: some View{
         HStack(spacing: 4) {
             // Timestamp
             Text(message.formattedTime())
                 .font(.caption2)
                 .foregroundColor(.gray)
             
-            // Status indicators (for sent messages)
             if isSentByMe {
-                // Phase 4.5: Show read count for groups, checkmarks for direct chats
                 if isGroupChat && message.status == .read {
                     readCountIndicator
                 } else {
@@ -363,8 +332,6 @@ struct MessageRow: View {
         .padding(.horizontal, 12)
     }
     
-    // MARK: - Read Count Indicator (for groups)
-    
     private var readCountIndicator: some View {
         Group {
             if let readBy = message.readBy, !readBy.isEmpty {
@@ -372,13 +339,10 @@ struct MessageRow: View {
                     .font(.caption2)
                     .foregroundColor(.blue)
             } else {
-                // Fallback to checkmarks if no read receipts yet
                 statusIndicator
             }
         }
     }
-    
-    // MARK: - Status Indicator
     
     private var statusIndicator: some View {
         Group {
@@ -412,8 +376,6 @@ struct MessageRow: View {
             }
         }
     }
-    
-    // MARK: - Context Menu
     
     private var messageContextMenu: some View {
         Group {
@@ -483,8 +445,6 @@ struct MessageRow: View {
         }
     }
 }
-
-// MARK: - Array Extension for Unique Values
 
 extension Array where Element: Hashable {
     func uniqued() -> [Element] {

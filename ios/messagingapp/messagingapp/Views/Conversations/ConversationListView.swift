@@ -9,6 +9,7 @@ import SwiftUI
 
 struct ConversationListView: View {
     @StateObject private var viewModel = ConversationListViewModel()
+    @EnvironmentObject private var toastManager: ToastManager
     @State private var showingNewChat = false
     
     var body: some View {

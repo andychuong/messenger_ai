@@ -12,6 +12,7 @@
 		3765655A2EA709BB0035F5DA /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 376565592EA709BB0035F5DA /* FirebaseFirestore */; };
 		3765655C2EA709BB0035F5DA /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 3765655B2EA709BB0035F5DA /* FirebaseMessaging */; };
 		3765655E2EA709BB0035F5DA /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 3765655D2EA709BB0035F5DA /* FirebaseStorage */; };
+		379F03FF2EA850BB0095856B /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 379F03FE2EA850BB0095856B /* WebRTC */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -74,6 +75,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				3765655C2EA709BB0035F5DA /* FirebaseMessaging in Frameworks */,
+				379F03FF2EA850BB0095856B /* WebRTC in Frameworks */,
 				376565562EA709BB0035F5DA /* FirebaseAnalytics in Frameworks */,
 				376565582EA709BB0035F5DA /* FirebaseAuth in Frameworks */,
 				3765655E2EA709BB0035F5DA /* FirebaseStorage in Frameworks */,
@@ -143,6 +145,7 @@
 				376565592EA709BB0035F5DA /* FirebaseFirestore */,
 				3765655B2EA709BB0035F5DA /* FirebaseMessaging */,
 				3765655D2EA709BB0035F5DA /* FirebaseStorage */,
+				379F03FE2EA850BB0095856B /* WebRTC */,
 			);
 			productName = messagingapp;
 			productReference = 376565262EA708190035F5DA /* messagingapp.app */;
@@ -228,6 +231,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				376565542EA709BB0035F5DA /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				379F03FD2EA850BB0095856B /* XCRemoteSwiftPackageReference "WebRTC" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 376565272EA708190035F5DA /* Products */;
@@ -628,6 +632,14 @@
 				minimumVersion = 12.4.0;
 			};
 		};
+		379F03FD2EA850BB0095856B /* XCRemoteSwiftPackageReference "WebRTC" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/stasel/WebRTC.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 115.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -655,6 +667,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 376565542EA709BB0035F5DA /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseStorage;
+		};
+		379F03FE2EA850BB0095856B /* WebRTC */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 379F03FD2EA850BB0095856B /* XCRemoteSwiftPackageReference "WebRTC" */;
+			productName = WebRTC;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -9,6 +9,8 @@ import SwiftUI
 
 struct MainTabView: View {
     @EnvironmentObject var authService: AuthService
+    @StateObject private var toastManager = ToastManager()
+    @StateObject private var messageListener = MessageToastListener()
     
     var body: some View {
         TabView {
@@ -17,6 +19,7 @@ struct MainTabView: View {
                 .tabItem {
                     Label("Messages", systemImage: "message.fill")
                 }
+                .environmentObject(toastManager)
             
             // Friends tab
             FriendsListView()
@@ -39,6 +42,16 @@ struct MainTabView: View {
             .tabItem {
                 Label("Profile", systemImage: "person.fill")
             }
+        }
+        .toastContainer(toastManager: toastManager) { conversationId in
+            // Handle toast tap - navigate to conversation
+            // This will be handled by the ConversationListView
+        }
+        .onAppear {
+            messageListener.startListening(toastManager: toastManager)
+        }
+        .onDisappear {
+            messageListener.stopListening()
         }
     }
 }

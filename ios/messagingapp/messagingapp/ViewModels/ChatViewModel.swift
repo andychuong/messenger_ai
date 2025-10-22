@@ -1,10 +1,3 @@
-//
-//  ChatViewModel.swift
-//  messagingapp
-//
-//  Phase 3: Core Messaging
-//
-
 import Foundation
 import FirebaseFirestore
 import FirebaseAuth
@@ -19,18 +12,13 @@ class ChatViewModel: ObservableObject {
     @Published var isSending = false
     @Published var errorMessage: String?
     @Published var conversation: Conversation?
-    @Published var otherUserStatus: User.UserStatus = .offline  // For direct chats
-    
-    // Edit mode
+    @Published var otherUserStatus: User.UserStatus = .offline
     @Published var isEditingMessage = false
     @Published var editingMessage: Message?
-    
-    // Image picking
     @Published var showingImagePicker = false
     @Published var selectedImage: UIImage?
-    
-    // Voice recording
     @Published var showingVoiceRecorder = false
+    
     let voiceService = VoiceRecordingService()
     
     private let messageService = MessageService()
@@ -42,14 +30,13 @@ class ChatViewModel: ObservableObject {
     private let db = Firestore.firestore()
     
     let conversationId: String
-    let otherUserId: String  // Only used for direct chats
-    let otherUserName: String  // Only used for direct chats (deprecated)
+    let otherUserId: String
+    let otherUserName: String
     
     var currentUserId: String? {
         return Auth.auth().currentUser?.uid
     }
     
-    // Phase 4.5: Group chat support
     var isGroupChat: Bool {
         return conversation?.type == .group
     }
@@ -66,14 +53,10 @@ class ChatViewModel: ObservableObject {
         return conversation?.memberCount ?? 0
     }
     
-    // MARK: - Lifecycle
-    
-    // Phase 4.5: New conversation-based initializer
     init(conversation: Conversation) {
         self.conversationId = conversation.id ?? ""
         self.conversation = conversation
         
-        // For backward compatibility with direct chats
         if conversation.type == .direct, let currentUserId = Auth.auth().currentUser?.uid {
             self.otherUserId = conversation.otherParticipantId(currentUserId: currentUserId) ?? ""
             self.otherUserName = conversation.otherParticipantDetails(currentUserId: currentUserId)?.name ?? ""
@@ -83,7 +66,6 @@ class ChatViewModel: ObservableObject {
         }
     }
     
-    // Legacy initializer for backward compatibility
     init(conversationId: String, otherUserId: String, otherUserName: String) {
         self.conversationId = conversationId
         self.otherUserId = otherUserId
@@ -96,32 +78,24 @@ class ChatViewModel: ObservableObject {
         userStatusListener?.remove()
     }
     
-    // MARK: - Setup
-    
     func setupRealtimeListeners() {
-        // Listen to messages
         messagesListener = messageService.listenToMessages(conversationId: conversationId) { [weak self] messages in
             Task { @MainActor in
                 self?.messages = messages
-                // Mark all messages as read when viewing
                 await self?.markAllMessagesAsRead()
             }
         }
         
-        // Listen to conversation updates (for typing indicators, online status, etc.)
         conversationListener = conversationService.listenToConversation(conversationId: conversationId) { [weak self] conversation in
             Task { @MainActor in
                 self?.conversation = conversation
             }
         }
         
-        // Listen to other user's status (for direct chats only)
         if !isGroupChat && !otherUserId.isEmpty {
             setupUserStatusListener()
         }
     }
-    
-    // MARK: - User Status Listener
     
     private func setupUserStatusListener() {
         userStatusListener = db.collection("users")
@@ -140,8 +114,6 @@ class ChatViewModel: ObservableObject {
             }
     }
     
-    // MARK: - Load Messages
-    
     func loadMessages() async {
         isLoading = true
         errorMessage = nil
@@ -149,8 +121,6 @@ class ChatViewModel: ObservableObject {
         do {
             let loadedMessages = try await messageService.fetchMessages(conversationId: conversationId, limit: 50)
             messages = loadedMessages
-            
-            // Mark as read
             await markAllMessagesAsRead()
         } catch {
             errorMessage = "Failed to load messages: \(error.localizedDescription)"
@@ -160,21 +130,18 @@ class ChatViewModel: ObservableObject {
         isLoading = false
     }
     
-    // MARK: - Send Message
-    
     func sendMessage() async {
         guard !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return
         }
         
-        // Check if we're editing or sending new message
         if isEditingMessage, let message = editingMessage {
             await updateEditedMessage(message)
             return
         }
         
         let textToSend = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
-        messageText = ""  // Clear input immediately for better UX
+        messageText = ""
         
         isSending = true
         errorMessage = nil
@@ -185,21 +152,17 @@ class ChatViewModel: ObservableObject {
                 text: textToSend
             )
             
-            // Optimistically add message to local array if not already there
             if !messages.contains(where: { $0.id == sentMessage.id }) {
                 messages.append(sentMessage)
             }
         } catch {
             errorMessage = "Failed to send message: \(error.localizedDescription)"
             print("Error sending message: \(error)")
-            // Restore text on failure
             messageText = textToSend
         }
         
         isSending = false
     }
-    
-    // MARK: - Mark as Read
     
     func markAllMessagesAsRead() async {
         do {
@@ -208,8 +171,6 @@ class ChatViewModel: ObservableObject {
             print("Error marking messages as read: \(error)")
         }
     }
-    
-    // MARK: - Delete Message
     
     func deleteMessage(_ message: Message) async {
         guard let messageId = message.id else { return }
@@ -222,8 +183,6 @@ class ChatViewModel: ObservableObject {
             print("Error deleting message: \(error)")
         }
     }
-    
-    // MARK: - Edit Message
     
     func startEditing(_ message: Message) {
         isEditingMessage = true
@@ -241,8 +200,6 @@ class ChatViewModel: ObservableObject {
         guard let messageId = message.id else { return }
         
         let newText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        // Clear edit mode
         isEditingMessage = false
         editingMessage = nil
         messageText = ""
@@ -279,8 +236,6 @@ class ChatViewModel: ObservableObject {
         }
     }
     
-    // MARK: - Reactions
-    
     func addReaction(to message: Message, emoji: String) async {
         guard let messageId = message.id else { return }
         
@@ -307,8 +262,6 @@ class ChatViewModel: ObservableObject {
             print("Error removing reaction: \(error)")
         }
     }
-    
-    // MARK: - Utility
     
     func shouldShowDateSeparator(for index: Int) -> Bool {
         guard index < messages.count else { return false }
@@ -340,8 +293,6 @@ class ChatViewModel: ObservableObject {
         }
     }
     
-    // MARK: - Image Messages
-    
     func sendImageMessage(_ image: UIImage) async {
         isSending = true
         errorMessage = nil
@@ -352,7 +303,6 @@ class ChatViewModel: ObservableObject {
                 conversationId: conversationId
             )
             
-            // Optimistically add to local array
             if !messages.contains(where: { $0.id == message.id }) {
                 messages.append(message)
             }
@@ -363,8 +313,6 @@ class ChatViewModel: ObservableObject {
         
         isSending = false
     }
-    
-    // MARK: - Voice Messages
     
     func sendVoiceMessage() async {
         guard let recordingURL = voiceService.recordingURL else {
@@ -385,12 +333,10 @@ class ChatViewModel: ObservableObject {
                 duration: duration
             )
             
-            // Optimistically add to local array
             if !messages.contains(where: { $0.id == message.id }) {
                 messages.append(message)
             }
             
-            // Reset voice service
             voiceService.cancelRecording()
         } catch {
             errorMessage = "Failed to send voice message: \(error.localizedDescription)"

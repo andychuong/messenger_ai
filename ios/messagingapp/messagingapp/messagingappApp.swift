@@ -22,6 +22,9 @@ struct messagingappApp: App {
     init() {
         FirebaseApp.configure()
         print("✅ Firebase configured!")
+        
+        // Initialize call service with user ID once authenticated
+        // This will be set properly in the auth flow
     }
     
     var sharedModelContainer: ModelContainer = {
@@ -46,6 +49,13 @@ struct messagingappApp: App {
             } else if authService.isAuthenticated {
                 MainTabView()
                     .environmentObject(authService)
+                    .onAppear {
+                        // Set current user ID for call service
+                        if let userId = authService.currentUser?.id {
+                            CallService.shared.currentUserId = userId
+                            CallService.shared.startListening()
+                        }
+                    }
             } else {
                 LoginView(authService: authService)
             }

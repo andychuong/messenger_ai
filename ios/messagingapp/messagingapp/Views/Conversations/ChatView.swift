@@ -9,6 +9,8 @@ import SwiftUI
 
 struct ChatView: View {
     @StateObject private var viewModel: ChatViewModel
+    @StateObject private var callViewModel = CallViewModel()
+    @EnvironmentObject private var toastManager: ToastManager
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedMessageForThread: Message?
@@ -106,21 +108,22 @@ struct ChatView: View {
                         }
                     }
                     
-                    // Voice call button (Phase 5)
-                    Button {
-                        // Will implement in Phase 5
-                    } label: {
-                        Image(systemName: "phone.fill")
+                    // Call buttons (only for direct conversations)
+                    if !viewModel.isGroupChat, !viewModel.otherUserId.isEmpty {
+                        // Voice call button
+                        Button {
+                            callViewModel.startAudioCall(to: viewModel.otherUserId)
+                        } label: {
+                            Image(systemName: "phone.fill")
+                        }
+                        
+                        // Video call button
+                        Button {
+                            callViewModel.startVideoCall(to: viewModel.otherUserId)
+                        } label: {
+                            Image(systemName: "video.fill")
+                        }
                     }
-                    .disabled(true)
-                    
-                    // Video call button (Phase 5)
-                    Button {
-                        // Will implement in Phase 5
-                    } label: {
-                        Image(systemName: "video.fill")
-                    }
-                    .disabled(true)
                 }
             }
         }
@@ -129,11 +132,35 @@ struct ChatView: View {
                 GroupInfoView(conversation: conversation)
             }
         }
+        .fullScreenCover(isPresented: $callViewModel.showIncomingCall) {
+            if let call = callViewModel.incomingCall {
+                IncomingCallView(
+                    call: call,
+                    onAnswer: {
+                        callViewModel.answerCall()
+                    },
+                    onDecline: {
+                        callViewModel.declineCall()
+                    }
+                )
+            }
+        }
+        .fullScreenCover(isPresented: $callViewModel.showActiveCall) {
+            if let call = callViewModel.currentCall {
+                ActiveCallView(call: call)
+            }
+        }
         .onAppear {
             viewModel.setupRealtimeListeners()
             Task {
                 await viewModel.loadMessages()
             }
+            // Set active conversation to prevent toasts for this chat
+            toastManager.activeConversationId = viewModel.conversationId
+        }
+        .onDisappear {
+            // Clear active conversation when leaving
+            toastManager.activeConversationId = nil
         }
         .navigationDestination(item: $selectedMessageForThread) { message in
             if let currentUserId = viewModel.currentUserId {
@@ -326,6 +353,7 @@ struct ChatView: View {
             otherUserId: "user456",
             otherUserName: "Alice"
         )
+        .environmentObject(ToastManager())
     }
 }
 

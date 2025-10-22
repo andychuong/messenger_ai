@@ -161,16 +161,20 @@ struct VoiceRecorderView: View {
     }
     
     private func animateWaveform() {
-        Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { timer in
-            guard voiceService.isRecording else {
-                timer.invalidate()
-                return
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak voiceService] currentTimer in
+            Task { @MainActor [weak voiceService] in
+                guard let voiceService = voiceService, voiceService.isRecording else {
+                    currentTimer.invalidate()
+                    return
+                }
+                
+                // Shift amplitudes left and add new random value
+                waveformAmplitudes.removeFirst()
+                waveformAmplitudes.append(CGFloat.random(in: 0.2...1.0))
             }
-            
-            // Shift amplitudes left and add new random value
-            waveformAmplitudes.removeFirst()
-            waveformAmplitudes.append(CGFloat.random(in: 0.2...1.0))
         }
+        // Keep timer alive
+        RunLoop.main.add(timer, forMode: .common)
     }
 }
 

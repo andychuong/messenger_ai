@@ -22,8 +22,8 @@ An iOS messaging application with AI-powered features including translation, voi
 MessagingApp/
 ├── ios/              # iOS app (Swift/SwiftUI)
 ├── firebase/         # Backend (Cloud Functions, Firestore)
-├── APP_PLAN.md      # Detailed implementation plan
-└── README.md        # This file
+├── docs/             # Documentation files
+└── README.md         # This file
 ```
 
 ## 🛠 Tech Stack
@@ -194,36 +194,43 @@ firebase emulators:start
 3. Build and run (Cmd+R)
 4. Test with two devices for messaging/calling
 
-## 📱 Development Workflow
+## 📱 Development Phases
 
-### Phase 1: MVP (Week 1)
-- [ ] User authentication
-- [ ] Friends system
-- [ ] Basic messaging
-- [ ] Read receipts
+### Phase 1: Authentication & Friends ✅
+- [x] User authentication
+- [x] Friends system
+- [x] Basic messaging
+- [x] Read receipts
 
-### Phase 2: Rich Features (Week 2)
-- [ ] Emoji reactions
-- [ ] Image sharing
-- [ ] Voice messages
-- [ ] Message editing
+### Phase 2: Rich Media & Messaging ✅
+- [x] Emoji reactions
+- [x] Image sharing
+- [x] Voice messages with transcription
+- [x] Message editing
 
-### Phase 3: Calling (Week 3)
-- [ ] WebRTC integration
-- [ ] Audio calls
-- [ ] Video calls
+### Phase 3: AI Features ✅
+- [x] Translation
+- [x] Voice-to-text (Whisper)
+- [x] RAG pipeline
+- [x] AI assistant
 
-### Phase 4: Security (Week 4)
-- [ ] End-to-end encryption
-- [ ] Key management
+### Phase 4: Message Threading ✅
+- [x] Thread creation
+- [x] Thread replies
+- [x] Thread UI/UX
 
-### Phase 5: AI Features (Weeks 5-6)
-- [ ] Translation
-- [ ] Voice-to-text
-- [ ] RAG pipeline
-- [ ] AI assistant
+### Phase 4.5: Group Chat ✅
+- [x] Group conversations
+- [x] Group management
+- [x] Group notifications
 
-See [APP_PLAN.md](./APP_PLAN.md) for detailed task list.
+### Phase 5: Voice/Video Calling ✅
+- [x] WebRTC integration
+- [x] Audio calls
+- [x] Video calls
+- [x] Call notifications
+
+See [APP_PLAN.md](./docs/APP_PLAN.md) for detailed implementation plan.
 
 ## 🏗 Architecture Overview
 
@@ -284,14 +291,46 @@ See [APP_PLAN.md](./APP_PLAN.md) for detailed task list.
 
 ## 📖 Documentation
 
-- [APP_PLAN.md](./APP_PLAN.md) - Complete implementation plan
+### Project Documentation (docs/)
+
+#### Getting Started
+- [SETUP_GUIDE.md](./docs/SETUP_GUIDE.md) - Detailed setup instructions
+- [QUICKSTART.md](./docs/QUICKSTART.md) - Quick start guide
+- [QUICKSTART_PHASE5.md](./docs/QUICKSTART_PHASE5.md) - Phase 5 quick start
+
+#### Planning & Architecture
+- [APP_PLAN.md](./docs/APP_PLAN.md) - Complete implementation plan
+- [COST_BREAKDOWN.md](./docs/COST_BREAKDOWN.md) - Cost analysis
+- [VECTOR_STORE_OPTIONS.md](./docs/VECTOR_STORE_OPTIONS.md) - Vector database options
+
+#### Phase Documentation
+- [PHASE1_COMPLETE.md](./docs/PHASE1_COMPLETE.md) - Authentication & Friends
+- [PHASE2_COMPLETE.md](./docs/PHASE2_COMPLETE.md) - Messaging & Media
+- [PHASE3_COMPLETE.md](./docs/PHASE3_COMPLETE.md) - AI Features
+- [PHASE4_COMPLETE.md](./docs/PHASE4_COMPLETE.md) - Message Threading
+- [PHASE4.5_COMPLETE.md](./docs/PHASE4.5_COMPLETE.md) - Group Chat
+- [PHASE5_COMPLETE.md](./docs/PHASE5_COMPLETE.md) - Voice/Video Calling
+
+#### Testing Guides
+- [PHASE3_TESTING_PLAN.md](./docs/PHASE3_TESTING_PLAN.md) - AI features testing
+- [PHASE4_TESTING_PLAN.md](./docs/PHASE4_TESTING_PLAN.md) - Threading testing
+- [PHASE4.5_TESTING_GUIDE.md](./docs/PHASE4.5_TESTING_GUIDE.md) - Group chat testing
+- [PHASE5_TESTING_GUIDE.md](./docs/PHASE5_TESTING_GUIDE.md) - Calling testing
+
+#### Technical Guides
+- [FCM_SETUP_COMPLETE.md](./docs/FCM_SETUP_COMPLETE.md) - Firebase Cloud Messaging setup
+- [PHASE5_WEBRTC_PACKAGE.md](./docs/PHASE5_WEBRTC_PACKAGE.md) - WebRTC implementation
+- [THREAD_UI_CLEANUP.md](./docs/THREAD_UI_CLEANUP.md) - UI cleanup notes
+
+### External Resources
 - [Firebase Documentation](https://firebase.google.com/docs)
 - [SwiftUI Tutorials](https://developer.apple.com/tutorials/swiftui)
 - [OpenAI API Docs](https://platform.openai.com/docs)
+- [WebRTC Documentation](https://webrtc.org/)
 
 ## 🤝 Contributing
 
-This is a personal project for learning purposes. See APP_PLAN.md for development roadmap.
+This is a personal project for learning purposes. See [APP_PLAN.md](./docs/APP_PLAN.md) for development roadmap.
 
 ## 📝 License
 
@@ -305,6 +344,8 @@ Andy Chuong
 
 **Project Status**: 🚧 In Development
 
-**Last Updated**: October 20, 2025
+**Completed Phases**: 1, 2, 3, 4, 4.5, 5 ✅
+
+**Last Updated**: October 22, 2025
 
 

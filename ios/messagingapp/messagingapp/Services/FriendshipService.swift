@@ -54,7 +54,7 @@ class FriendshipService {
         
         let friendship = Friendship(userId1: userId1, userId2: userId2, requestedBy: currentUserId)
         
-        let docRef = try await db.collection("friendships").addDocument(from: friendship)
+        let docRef = try db.collection("friendships").addDocument(from: friendship)
         
         return docRef.documentID
     }

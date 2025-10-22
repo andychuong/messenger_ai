@@ -1,10 +1,3 @@
-//
-//  AuthService.swift
-//  messagingapp
-//
-//  Handles Firebase authentication
-//
-
 import Foundation
 import Combine
 import FirebaseAuth
@@ -20,21 +13,21 @@ class AuthService: ObservableObject {
     private let db = Firestore.firestore()
     private var authStateHandle: AuthStateDidChangeListenerHandle?
     
-    // Shared instance for NotificationService to access
     static var shared: AuthService?
     
     init() {
         Self.shared = self
         
-        // Listen for auth state changes
         authStateHandle = auth.addStateDidChangeListener { [weak self] _, user in
             Task { @MainActor in
                 if let user = user {
                     await self?.fetchUserData(userId: user.uid)
+                    PresenceService.shared.startMonitoring()
                 } else {
                     self?.currentUser = nil
                     self?.isAuthenticated = false
-                    self?.isLoading = false  // Done loading
+                    self?.isLoading = false
+                    PresenceService.shared.stopMonitoring()
                 }
             }
         }
@@ -46,58 +39,40 @@ class AuthService: ObservableObject {
         }
     }
     
-    // MARK: - Sign Up
     func signUp(email: String, password: String, displayName: String) async throws {
-        // Create auth account
         let result = try await auth.createUser(withEmail: email, password: password)
         
-        // Create user document in Firestore
         let user = User(id: result.user.uid, email: email, displayName: displayName)
         try await db.collection(User.collectionName)
             .document(result.user.uid)
             .setData(user.toDictionary())
         
-        // Set status to online
         try await updateUserStatus(userId: result.user.uid, status: .online)
-        
-        // Fetch user data
         await fetchUserData(userId: result.user.uid)
-        
-        // Request notification permission and save FCM token
         await setupNotifications(userId: result.user.uid)
+        PresenceService.shared.startMonitoring()
     }
     
-    // MARK: - Login
     func login(email: String, password: String) async throws {
         let result = try await auth.signIn(withEmail: email, password: password)
-        
-        // Set status to online
         try await updateUserStatus(userId: result.user.uid, status: .online)
-        
         await fetchUserData(userId: result.user.uid)
-        
-        // Request notification permission and save FCM token
         await setupNotifications(userId: result.user.uid)
+        PresenceService.shared.startMonitoring()
     }
     
-    // MARK: - Logout
     func logout() async throws {
-        // Set status to offline BEFORE logging out
         if let userId = currentUser?.id {
-            // Set status to offline first
+            PresenceService.shared.stopMonitoring()
             try? await updateUserStatus(userId: userId, status: .offline)
-            
-            // Remove FCM token
             await NotificationService.shared.removeTokenFromFirestore(userId: userId)
         }
         
-        // Now sign out
         try auth.signOut()
         currentUser = nil
         isAuthenticated = false
     }
     
-    // MARK: - Fetch User Data
     private func fetchUserData(userId: String) async {
         do {
             let document = try await db.collection(User.collectionName)
@@ -107,18 +82,17 @@ class AuthService: ObservableObject {
             if let user = try? document.data(as: User.self) {
                 self.currentUser = user
                 self.isAuthenticated = true
-                self.isLoading = false  // Done loading
+                self.isLoading = false
                 print("✅ User data loaded: \(user.displayName)")
             } else {
-                self.isLoading = false  // Done loading even if user not found
+                self.isLoading = false
             }
         } catch {
             print("❌ Error fetching user data: \(error.localizedDescription)")
-            self.isLoading = false  // Done loading even on error
+            self.isLoading = false
         }
     }
     
-    // MARK: - Update Profile
     func updateProfile(displayName: String? = nil, photoURL: String? = nil) async throws {
         guard let userId = currentUser?.id else { return }
         
@@ -137,27 +111,18 @@ class AuthService: ObservableObject {
         await fetchUserData(userId: userId)
     }
     
-    // MARK: - Reset Password
     func resetPassword(email: String) async throws {
         try await auth.sendPasswordReset(withEmail: email)
     }
     
-    // MARK: - Notification Setup
-    
     private func setupNotifications(userId: String) async {
-        // Request notification permission
         let granted = await NotificationService.shared.requestPermission()
         
         if granted {
-            // Wait a moment for FCM token to be received
-            try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
-            
-            // Save FCM token to Firestore
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
             await NotificationService.shared.saveTokenToFirestore(userId: userId)
         }
     }
-    
-    // MARK: - Status Management
     
     private func updateUserStatus(userId: String, status: User.UserStatus) async throws {
         print("🔵 Updating user status to: \(status.rawValue) for user: \(userId)")

@@ -64,9 +64,13 @@ class VoiceRecordingService: NSObject, ObservableObject, AVAudioPlayerDelegate {
     
     /// Request microphone permission
     func requestMicrophonePermission() async -> Bool {
-        await withCheckedContinuation { continuation in
-            AVAudioSession.sharedInstance().requestRecordPermission { granted in
-                continuation.resume(returning: granted)
+        if #available(iOS 17.0, *) {
+            return await AVAudioApplication.requestRecordPermission()
+        } else {
+            return await withCheckedContinuation { continuation in
+                AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                    continuation.resume(returning: granted)
+                }
             }
         }
     }
@@ -76,7 +80,14 @@ class VoiceRecordingService: NSObject, ObservableObject, AVAudioPlayerDelegate {
         guard !isRecording else { return }
         
         // Check permission
-        guard AVAudioSession.sharedInstance().recordPermission == .granted else {
+        let hasPermission: Bool
+        if #available(iOS 17.0, *) {
+            hasPermission = AVAudioApplication.shared.recordPermission == .granted
+        } else {
+            hasPermission = AVAudioSession.sharedInstance().recordPermission == .granted
+        }
+        
+        guard hasPermission else {
             recordingError = "Microphone permission not granted"
             return
         }
@@ -106,7 +117,7 @@ class VoiceRecordingService: NSObject, ObservableObject, AVAudioPlayerDelegate {
             
             // Start timer
             recordingTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-                Task { @MainActor in
+                Task { @MainActor [weak self] in
                     self?.updateRecordingDuration()
                 }
             }
@@ -173,7 +184,7 @@ class VoiceRecordingService: NSObject, ObservableObject, AVAudioPlayerDelegate {
             
             // Start playback timer
             playbackTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-                Task { @MainActor in
+                Task { @MainActor [weak self] in
                     self?.updatePlaybackProgress()
                 }
             }
