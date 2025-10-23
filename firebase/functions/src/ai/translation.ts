@@ -19,6 +19,7 @@ interface TranslationRequest {
   conversationId: string;
   targetLanguage: string;
   userId: string;
+  text?: string; // Optional: pass decrypted text directly (for encrypted messages)
 }
 
 /**
@@ -34,28 +35,45 @@ export const translateMessage = functions.https.onCall(async (data: TranslationR
     );
   }
   
-  const { messageId, conversationId, targetLanguage } = data;
+  const { messageId, conversationId, targetLanguage, text } = data;
   
   try {
-    // Get the message
-    const messageRef = admin.firestore()
-      .collection("conversations")
-      .doc(conversationId)
-      .collection("messages")
-      .doc(messageId);
+    let originalText: string;
+    let messageRef;
     
+    // If text is provided (decrypted), use it directly
+    if (text) {
+      originalText = text;
+      messageRef = admin.firestore()
+        .collection("conversations")
+        .doc(conversationId)
+        .collection("messages")
+        .doc(messageId);
+    } else {
+      // Otherwise, fetch from Firestore (for non-encrypted messages)
+      messageRef = admin.firestore()
+        .collection("conversations")
+        .doc(conversationId)
+        .collection("messages")
+        .doc(messageId);
+      
+      const messageSnap = await messageRef.get();
+      
+      if (!messageSnap.exists) {
+        throw new functions.https.HttpsError("not-found", "Message not found");
+      }
+      
+      const message = messageSnap.data();
+      originalText = message?.text;
+      
+      if (!originalText) {
+        throw new functions.https.HttpsError("invalid-argument", "Message has no text");
+      }
+    }
+    
+    // Check if translation already cached in Firestore
     const messageSnap = await messageRef.get();
-    
-    if (!messageSnap.exists) {
-      throw new functions.https.HttpsError("not-found", "Message not found");
-    }
-    
     const message = messageSnap.data();
-    const originalText = message?.text;
-    
-    if (!originalText) {
-      throw new functions.https.HttpsError("invalid-argument", "Message has no text");
-    }
     
     // Check if translation already cached
     const cachedTranslation = message?.translations?.[targetLanguage];

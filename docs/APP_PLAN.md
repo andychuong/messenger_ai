@@ -4,8 +4,27 @@
 
 **Platform:** iOS (Swift/SwiftUI)  
 **Backend:** Firebase (Firestore, Authentication, Storage, Cloud Functions)  
-**AI Integration:** GPT-4o, RAG Pipelines for conversation intelligence  
+**Vector Database:** Pinecone (for RAG and semantic search)  
+**AI Integration:** GPT-4o, Pinecone-powered RAG pipelines for conversation intelligence  
 **Core Features:** Secure messaging, voice/video calls, AI-powered translation & conversation analysis
+
+### 🔍 Pinecone Integration Highlights
+This implementation uses **Pinecone** as the vector database for all embedding storage and similarity search operations:
+
+- **Embeddings:** OpenAI text-embedding-3-large (1536 dimensions) → stored in Pinecone
+- **Search:** Semantic search via Pinecone's cosine similarity with metadata filtering
+- **Namespaces:** User-based isolation for privacy and access control
+- **Performance:** Sub-2s query response times for conversation intelligence
+- **Scale:** Production-ready for 10k+ users with serverless architecture
+
+**Why Pinecone?**
+- Production-grade performance and reliability
+- Managed service with minimal DevOps
+- Advanced filtering and metadata support
+- Horizontal scaling built-in
+- Cost-effective serverless option
+
+> **Note:** See [VECTOR_STORE_OPTIONS.md](./VECTOR_STORE_OPTIONS.md) for alternative vector databases if budget or hosting constraints exist. The architecture supports easy migration between vector stores.
 
 ---
 
@@ -68,8 +87,8 @@ Real-Time Calls: WebRTC with Firebase signaling
 #### AI Infrastructure
 ```
 LLM: OpenAI GPT-4o (via Cloud Functions)
-Embeddings: OpenAI text-embedding-3-large
-Vector Store: Pinecone or Firestore with pgvector
+Embeddings: OpenAI text-embedding-3-large (1536 dimensions)
+Vector Store: Pinecone (Serverless or Pod-based)
 Voice-to-Text: Whisper API
 Translation: GPT-4o with specialized prompts
 ```
@@ -189,9 +208,10 @@ Translation: GPT-4o with specialized prompts
 /embeddings/{messageId}
   - conversationId: string
   - messageId: string
-  - embedding: array[1536] (or reference to Pinecone)
+  - pineconeId: string (reference to Pinecone vector ID)
   - text: string (unencrypted snippet for search)
   - timestamp: timestamp
+  - indexed: boolean (whether vector is in Pinecone)
 
 /actionItems/{itemId}
   - conversationId: string
@@ -295,8 +315,9 @@ MessagingApp/
 │   │   ├── AIService.swift
 │   │   ├── TranslationService.swift
 │   │   ├── VoiceToTextService.swift
-│   │   ├── RAGService.swift
-│   │   └── EmbeddingService.swift
+│   │   ├── RAGService.swift (Pinecone search client)
+│   │   ├── EmbeddingService.swift (OpenAI embeddings)
+│   │   └── ConversationIntelligenceService.swift
 │   ├── Security/
 │   │   ├── EncryptionService.swift
 │   │   └── KeychainService.swift
@@ -366,30 +387,37 @@ MessagingApp/
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                  Query Embedding                             │
-│           OpenAI Embeddings API (1536 dims)                  │
+│     OpenAI text-embedding-3-large (1536 dimensions)          │
 └─────────────────────────────────────────────────────────────┘
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                Vector Similarity Search                      │
-│        Pinecone: Top 10 relevant messages by cosine          │
+│            Pinecone Vector Similarity Search                 │
+│    Query: Top-K (10) by cosine similarity                    │
+│    Filter: conversationId, userId (namespace)                │
+│    Response: Vector IDs + scores + metadata                  │
 └─────────────────────────────────────────────────────────────┘
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                  Context Assembly                            │
-│   Retrieve full messages + metadata from Firestore          │
+│   1. Get message IDs from Pinecone results                   │
+│   2. Retrieve full encrypted messages from Firestore        │
+│   3. Decrypt messages client-side (with user consent)        │
+│   4. Rank by relevance score + recency                       │
 └─────────────────────────────────────────────────────────────┘
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                   LLM Generation                             │
 │   GPT-4o: Answer question with retrieved context            │
+│   Include: Message text, sender, timestamp, conversation    │
 └─────────────────────────────────────────────────────────────┘
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                 Stream Response to User                      │
+│             Display citations/sources from search            │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -456,7 +484,25 @@ Implementation:
 - [ ] Configure Firestore security rules (initial)
 - [ ] Set up Firebase Cloud Functions project
   - [ ] Initialize Node.js project
-  - [ ] Install dependencies (firebase-admin, openai, etc.)
+  - [ ] Install dependencies:
+    - [ ] `firebase-admin` - Firebase SDK
+    - [ ] `openai` - OpenAI API client
+    - [ ] `@pinecone-database/pinecone` - Pinecone vector database client
+    - [ ] Other utilities as needed
+  - [ ] Configure environment variables (`.env` file):
+    ```bash
+    OPENAI_API_KEY=sk-...
+    PINECONE_API_KEY=...
+    PINECONE_ENVIRONMENT=us-east1-gcp
+    PINECONE_INDEX_NAME=messaging-app-vectors
+    ```
+  - [ ] Set Firebase Functions config:
+    ```bash
+    firebase functions:config:set openai.key="sk-..."
+    firebase functions:config:set pinecone.key="..."
+    firebase functions:config:set pinecone.environment="us-east1-gcp"
+    firebase functions:config:set pinecone.index="messaging-app-vectors"
+    ```
   - [ ] Deploy starter functions
 - [ ] Enable Firebase Cloud Messaging
 
@@ -897,74 +943,140 @@ Implementation:
 - [ ] Enable App Transport Security
 - [ ] Obfuscate API keys in Cloud Functions
 
-### Phase 7: AI Features - Translation (Days 17-18)
+### Phase 7: AI Features - Translation (Days 17-18) ✅ COMPLETE
 
 #### 7.1 Translation Service
-- [ ] Create Cloud Function `translateMessage`
-  - [ ] Accept message text + target language
-  - [ ] Call OpenAI GPT-4o with translation prompt
-  - [ ] Return translated text
-  - [ ] Cache translations in Firestore
-- [ ] Build `TranslationService.swift` (iOS)
-  - [ ] Call translation Cloud Function
-  - [ ] Cache translations locally
-  - [ ] Handle errors gracefully
-- [ ] Create `TranslationViewModel.swift`
+- [x] Create Cloud Function `translateMessage`
+  - [x] Accept message text + target language
+  - [x] Call OpenAI GPT-4o with translation prompt
+  - [x] Return translated text
+  - [x] Cache translations in Firestore
+- [x] Build `TranslationService.swift` (iOS)
+  - [x] Call translation Cloud Function
+  - [x] Cache translations locally
+  - [x] Handle errors gracefully
+- [x] Create `TranslationViewModel.swift`
 
 #### 7.2 Translation UI
-- [ ] Build `TranslationMenuView.swift`
-  - [ ] List of languages
-  - [ ] "Auto-detect" option
-  - [ ] Recently used languages
-  - [ ] Search languages
-- [ ] Add long-press gesture to `MessageRow`
-  - [ ] Show context menu
-  - [ ] "Translate" option
-  - [ ] Display translation in overlay/modal
-- [ ] Display cached translations
-  - [ ] Toggle between original and translated
-  - [ ] Show "Translated from X" label
-- [ ] Add loading indicator during translation
-- [ ] Handle translation errors
+- [x] Build `TranslationMenuView.swift`
+  - [x] List of languages
+  - [x] Recently used languages
+  - [x] Search languages
+- [x] Add long-press gesture to `MessageRow`
+  - [x] Show context menu
+  - [x] "Translate" option
+  - [x] Display translation in overlay/modal
+- [x] Display cached translations
+  - [x] Toggle between original and translated
+  - [x] Show "Translated to X" label
+- [x] Add loading indicator during translation
+- [x] Handle translation errors
+- [x] Build `TranslationOverlayView.swift` (bonus feature)
+  - [x] Beautiful overlay with toggle
+  - [x] Copy functionality
+  - [x] Cache indicator
+  - [x] Smooth animations
 
 ### Phase 8: AI Features - RAG & Conversation Intelligence (Days 19-22)
 
-#### 8.1 Embedding Pipeline
+#### 8.1 Pinecone Setup & Configuration
+- [ ] Create Pinecone account at https://www.pinecone.io
+  - [ ] Sign up for account (Starter plan or higher)
+  - [ ] Generate API key from console
+  - [ ] Note your environment (e.g., `us-east1-gcp`)
+- [ ] Create Pinecone index
+  - [ ] Name: `messaging-app-vectors` or `{project-name}-{env}`
+  - [ ] Dimensions: 1536 (matches text-embedding-3-large)
+  - [ ] Metric: `cosine` (for similarity search)
+  - [ ] Index type: Serverless (recommended) or Pod-based
+  - [ ] Region: Choose closest to Firebase Functions region
+- [ ] Set up Pinecone namespaces strategy
+  - [ ] Option A: Namespace per user (e.g., `user_{userId}`)
+  - [ ] Option B: Namespace per conversation (e.g., `conv_{conversationId}`)
+  - [ ] Option C: Single namespace with metadata filters
+- [ ] Install Pinecone SDK in Cloud Functions
+  - [ ] `npm install @pinecone-database/pinecone`
+  - [ ] Configure client with API key
+  - [ ] Test connection and index access
+
+#### 8.2 Embedding Generation Pipeline
 - [ ] Create Cloud Function `generateEmbedding`
-  - [ ] Accept message text
+  - [ ] Accept message text (decrypted, with user consent)
   - [ ] Call OpenAI embeddings API (text-embedding-3-large)
   - [ ] Return embedding vector (1536 dimensions)
-- [ ] Set up Pinecone account and index
-  - [ ] Create index with 1536 dimensions
-  - [ ] Set up namespace per user
+  - [ ] Cache embedding to avoid regeneration
+  - [ ] Handle rate limits and errors
 - [ ] Create Cloud Function `indexMessage`
-  - [ ] Triggered on new message
-  - [ ] Generate embedding
-  - [ ] Store in Pinecone with metadata
-  - [ ] Alternative: Store in Firestore
+  - [ ] Triggered on new message creation (Firestore trigger)
+  - [ ] Extract message text (decrypt if needed)
+  - [ ] Generate embedding using OpenAI
+  - [ ] Store in Pinecone with metadata:
+    ```javascript
+    {
+      id: messageId,
+      values: embedding,  // 1536-dim vector
+      metadata: {
+        conversationId: string,
+        senderId: string,
+        timestamp: number,
+        messagePreview: string (first 100 chars),
+        type: "text" | "voice" | "image"
+      }
+    }
+    ```
+  - [ ] Update Firestore `/embeddings/{messageId}` with pineconeId
+  - [ ] Handle failures with retry logic
 - [ ] Handle encryption considerations
-  - [ ] Store unencrypted snippet for indexing (with consent)
-  - [ ] Or index on-device (limited scale)
+  - [ ] User consent required for AI indexing
+  - [ ] Store unencrypted snippet in Pinecone metadata (first 100 chars)
+  - [ ] Add per-conversation AI opt-in/opt-out setting
+  - [ ] Skip indexing for "private" conversations
+  - [ ] Clear user vectors on account deletion (GDPR compliance)
 
-#### 8.2 RAG Search Service
-- [ ] Create Cloud Function `semanticSearch`
-  - [ ] Accept query text
-  - [ ] Generate query embedding
-  - [ ] Search Pinecone for similar messages
-  - [ ] Return top N results with scores
-  - [ ] Fetch full messages from Firestore
+#### 8.3 Pinecone RAG Search Service
+- [ ] Create Cloud Function `semanticSearchPinecone`
+  - [ ] Accept parameters: `query` (text), `userId`, `conversationId` (optional), `topK` (default 10)
+  - [ ] Generate query embedding via OpenAI
+  - [ ] Initialize Pinecone client
+  - [ ] Query Pinecone index:
+    ```javascript
+    const results = await index.query({
+      vector: queryEmbedding,
+      topK: 10,
+      includeMetadata: true,
+      filter: {
+        conversationId: conversationId,  // optional filter
+        senderId: { $ne: "system" }       // exclude system messages
+      },
+      namespace: `user_${userId}`  // user-specific namespace
+    });
+    ```
+  - [ ] Process results: extract message IDs and scores
+  - [ ] Fetch full messages from Firestore (batch read)
+  - [ ] Decrypt messages if needed
+  - [ ] Combine Pinecone scores with recency boost
+  - [ ] Return ranked results with metadata
 - [ ] Build `RAGService.swift` (iOS)
-  - [ ] Call semantic search function
-  - [ ] Process results
-  - [ ] Rank by relevance
-- [ ] Create Cloud Function `answerQuestion`
-  - [ ] Accept user question
-  - [ ] Perform semantic search
-  - [ ] Assemble context from results
-  - [ ] Call GPT-4o with context + question
-  - [ ] Stream response back
+  - [ ] `semanticSearch(query:conversationId:)` method
+  - [ ] Call Cloud Function with auth token
+  - [ ] Parse and display results
+  - [ ] Cache search results locally
+  - [ ] Handle errors gracefully
+- [ ] Create Cloud Function `answerQuestionWithRAG`
+  - [ ] Accept user question + optional context (conversationId)
+  - [ ] Perform semantic search via Pinecone
+  - [ ] Assemble context from top results (up to 10 messages)
+  - [ ] Build GPT-4o prompt with context:
+    ```
+    System: You are a helpful assistant...
+    Context: [Retrieved messages with metadata]
+    Question: [User's question]
+    ```
+  - [ ] Call GPT-4o API with streaming
+  - [ ] Stream response back to client
+  - [ ] Include citations (message IDs + timestamps)
 
-#### 8.3 Action Item Extraction
+#### 8.4 Action Item Extraction
 - [ ] Create Cloud Function `extractActionItems`
   - [ ] Triggered on new message (or on-demand)
   - [ ] Use GPT-4o function calling
@@ -978,7 +1090,7 @@ Implementation:
   - [ ] Checkboxes to mark complete
   - [ ] Link back to message
 
-#### 8.4 Decision Tracking
+#### 8.5 Decision Tracking
 - [ ] Create Cloud Function `detectDecision`
   - [ ] Analyze message for decisions
   - [ ] Extract: decision, who, rationale, date
@@ -989,7 +1101,7 @@ Implementation:
   - [ ] Search functionality
   - [ ] Link to original conversation
 
-#### 8.5 Priority Message Detection
+#### 8.6 Priority Message Detection
 - [ ] Create Cloud Function `classifyPriority`
   - [ ] Real-time or batch processing
   - [ ] Check for: mentions, questions, deadlines
@@ -999,6 +1111,27 @@ Implementation:
   - [ ] Red badge for priority conversations
   - [ ] Filter/sort by priority
 - [ ] Create "Priority Messages" inbox view
+
+#### 8.7 Pinecone Data Management & Cleanup
+- [ ] Create Cloud Function `deleteUserVectors`
+  - [ ] Triggered on user account deletion
+  - [ ] Delete all vectors in user's namespace
+  - [ ] Cleanup Firestore embeddings collection
+  - [ ] Log deletion for compliance audit
+- [ ] Create Cloud Function `deleteConversationVectors`
+  - [ ] Triggered when conversation is deleted
+  - [ ] Query Pinecone for conversation vectors
+  - [ ] Batch delete matching vectors
+  - [ ] Update Firestore embeddings status
+- [ ] Implement data retention policies
+  - [ ] Optional: Auto-delete vectors older than X months
+  - [ ] User-configurable retention settings
+  - [ ] Compliance with data protection regulations
+- [ ] Build admin/debug utilities
+  - [ ] Script to reindex all messages for a user
+  - [ ] Script to verify embedding consistency
+  - [ ] Dashboard to monitor Pinecone usage/costs
+  - [ ] Bulk migration tools if needed
 
 ### Phase 9: AI Chat Assistant (Days 23-25)
 
@@ -1252,6 +1385,15 @@ Implementation:
 - [ ] Test background/foreground transitions
 - [ ] Test push notifications
 - [ ] Test calling (audio & video)
+- [ ] Test Pinecone integration
+  - [ ] Message embedding generation and indexing
+  - [ ] Semantic search accuracy
+  - [ ] Query performance (latency < 2s)
+  - [ ] Namespace isolation (users can't see others' data)
+  - [ ] Metadata filtering (conversation, date range)
+  - [ ] Vector deletion on message/user deletion
+  - [ ] Error handling (rate limits, timeouts)
+  - [ ] Cost monitoring and optimization
 
 #### 13.4 Security Testing
 - [ ] Test encryption end-to-end
@@ -1290,9 +1432,18 @@ Implementation:
   - [ ] Security rules configuration
   - [ ] Environment variables
 - [ ] Document API keys setup
-  - [ ] OpenAI API key
-  - [ ] Pinecone API key
+  - [ ] OpenAI API key (https://platform.openai.com/api-keys)
+    - [ ] Required for: GPT-4o, Whisper, text-embedding-3-large
+    - [ ] Billing setup required
+  - [ ] Pinecone API key (https://www.pinecone.io)
+    - [ ] Create account and project
+    - [ ] Generate API key from console
+    - [ ] Note environment/region
+    - [ ] Create index with proper configuration
   - [ ] Firebase config
+    - [ ] GoogleService-Info.plist for iOS
+    - [ ] Service account key for Cloud Functions
+    - [ ] Functions config for API keys
 - [ ] Code documentation
   - [ ] Add comments to complex functions
   - [ ] Document service interfaces
@@ -1355,8 +1506,8 @@ Implementation:
 - Firebase Extensions (optional)
 
 ### AI & ML Services
-- OpenAI API (GPT-4o, Whisper, Embeddings)
-- Pinecone (vector database) or alternative
+- OpenAI API (GPT-4o, Whisper, text-embedding-3-large)
+- Pinecone (vector database for embeddings storage and similarity search)
 
 ### WebRTC
 - WebRTC framework for iOS
@@ -1382,12 +1533,71 @@ Implementation:
 7. **Function Calling:** Route assistant commands to appropriate functions
 
 ### RAG Pipeline Components
-1. **Embedding Generation:** Convert messages to vectors (text-embedding-3-large)
-2. **Vector Storage:** Pinecone index with user namespaces
-3. **Similarity Search:** Find relevant messages by semantic meaning
-4. **Context Assembly:** Retrieve full messages with metadata
-5. **LLM Generation:** Answer questions using retrieved context
-6. **Caching:** Store embeddings and responses for efficiency
+1. **Embedding Generation:** Convert messages to vectors (OpenAI text-embedding-3-large, 1536 dimensions)
+2. **Vector Storage:** Pinecone serverless index with user-specific namespaces
+3. **Similarity Search:** Pinecone cosine similarity search with metadata filtering
+4. **Context Assembly:** Retrieve full encrypted messages from Firestore using Pinecone result IDs
+5. **LLM Generation:** GPT-4o answers questions using retrieved context with citations
+6. **Caching:** Store embeddings in Pinecone + reference in Firestore for efficiency
+7. **Metadata Filtering:** Filter by conversation, user, timestamp, message type in Pinecone queries
+
+### Pinecone Implementation Details
+
+#### Index Configuration
+```javascript
+{
+  name: "messaging-app-vectors",
+  dimension: 1536,
+  metric: "cosine",
+  spec: {
+    serverless: {
+      cloud: "gcp",
+      region: "us-east1"
+    }
+  }
+}
+```
+
+#### Namespace Strategy
+- **User-based namespaces:** `user_{userId}` - All messages accessible to a user
+- **Benefits:** Easy access control, simplified queries, better privacy isolation
+- **Drawbacks:** May need cross-namespace queries for shared conversations
+
+#### Vector Metadata Schema
+```javascript
+{
+  messageId: "msg_123",           // Firestore document ID
+  conversationId: "conv_456",     // For filtering
+  senderId: "user_789",           // Message author
+  recipientId: "user_012",        // For DMs
+  timestamp: 1698345600000,       // Unix timestamp
+  messageType: "text",            // text | voice | image
+  preview: "Hey, let's meet...",  // First 100 chars (searchable)
+  language: "en"                  // Detected language
+}
+```
+
+#### Querying Best Practices
+1. **Always include namespace** - Ensures user data isolation
+2. **Use metadata filters** - Reduce search space before vector similarity
+3. **Limit topK** - Start with 10, adjust based on use case
+4. **Include metadata in response** - Avoid extra Firestore reads
+5. **Handle empty results** - Graceful fallback when no matches found
+6. **Batch upserts** - When indexing multiple messages (up to 100 per batch)
+
+#### Cost Optimization
+- **Serverless pricing:** Pay per read/write operation
+- **Batch operations:** Reduce API calls by grouping upserts
+- **Selective indexing:** Skip system messages, very short messages
+- **TTL/Deletion:** Remove old vectors if not needed (GDPR compliance)
+- **Monitor usage:** Track read/write units in Pinecone dashboard
+
+#### Error Handling
+- **Rate limits:** Implement exponential backoff and retry logic
+- **Timeout errors:** Set reasonable timeout (5-10s for queries)
+- **Index not ready:** Wait for index to be ready after creation
+- **Namespace not found:** Create namespace on first insert
+- **Vector dimension mismatch:** Validate embedding size before upsert
 
 ### Privacy Considerations
 - Opt-in for AI features (user consent)
@@ -1438,15 +1648,242 @@ Implementation:
 
 ---
 
+## Pinecone Code Examples
+
+### Example 1: Initialize Pinecone Client (Cloud Function)
+
+```typescript
+// firebase/functions/src/utils/pinecone.ts
+import { Pinecone } from '@pinecone-database/pinecone';
+
+let pineconeClient: Pinecone | null = null;
+
+export async function getPineconeClient(): Promise<Pinecone> {
+  if (!pineconeClient) {
+    pineconeClient = new Pinecone({
+      apiKey: functions.config().pinecone.key,
+      environment: functions.config().pinecone.environment,
+    });
+  }
+  return pineconeClient;
+}
+
+export async function getPineconeIndex() {
+  const client = await getPineconeClient();
+  return client.index(functions.config().pinecone.index);
+}
+```
+
+### Example 2: Index Message with Embedding
+
+```typescript
+// firebase/functions/src/ai/indexMessage.ts
+import * as functions from 'firebase-functions';
+import * as admin from 'firebase-admin';
+import { getPineconeIndex } from '../utils/pinecone';
+import { generateEmbedding } from './embeddings';
+
+export const indexMessage = functions.firestore
+  .document('conversations/{conversationId}/messages/{messageId}')
+  .onCreate(async (snap, context) => {
+    const messageData = snap.data();
+    const { conversationId, messageId } = context.params;
+    
+    // Skip if message is not text or user opted out
+    if (messageData.type !== 'text' || messageData.skipAI) {
+      return;
+    }
+
+    try {
+      // Generate embedding
+      const embedding = await generateEmbedding(messageData.text);
+      
+      // Get Pinecone index
+      const index = await getPineconeIndex();
+      
+      // Upsert vector to Pinecone with metadata
+      await index.namespace(`user_${messageData.senderId}`).upsert([{
+        id: messageId,
+        values: embedding,
+        metadata: {
+          conversationId,
+          senderId: messageData.senderId,
+          timestamp: messageData.timestamp.toMillis(),
+          messageType: 'text',
+          preview: messageData.text.substring(0, 100),
+        },
+      }]);
+      
+      // Update Firestore with indexing status
+      await admin.firestore()
+        .collection('embeddings')
+        .doc(messageId)
+        .set({
+          conversationId,
+          messageId,
+          pineconeId: messageId,
+          indexed: true,
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      
+      console.log(`Indexed message ${messageId} to Pinecone`);
+    } catch (error) {
+      console.error('Error indexing message:', error);
+      // Log error but don't fail the message creation
+    }
+  });
+```
+
+### Example 3: Semantic Search with Pinecone
+
+```typescript
+// firebase/functions/src/ai/semanticSearch.ts
+import * as functions from 'firebase-functions';
+import { getPineconeIndex } from '../utils/pinecone';
+import { generateEmbedding } from './embeddings';
+
+export const semanticSearch = functions.https.onCall(async (data, context) => {
+  // Ensure user is authenticated
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+  
+  const { query, conversationId, topK = 10 } = data;
+  const userId = context.auth.uid;
+  
+  try {
+    // Generate query embedding
+    const queryEmbedding = await generateEmbedding(query);
+    
+    // Query Pinecone
+    const index = await getPineconeIndex();
+    const queryRequest: any = {
+      vector: queryEmbedding,
+      topK,
+      includeMetadata: true,
+    };
+    
+    // Add conversation filter if specified
+    if (conversationId) {
+      queryRequest.filter = { conversationId };
+    }
+    
+    const results = await index.namespace(`user_${userId}`).query(queryRequest);
+    
+    // Extract message IDs and scores
+    const matches = results.matches.map((match: any) => ({
+      messageId: match.id,
+      score: match.score,
+      metadata: match.metadata,
+    }));
+    
+    return {
+      success: true,
+      results: matches,
+      query,
+    };
+  } catch (error) {
+    console.error('Semantic search error:', error);
+    throw new functions.https.HttpsError('internal', 'Failed to perform search');
+  }
+});
+```
+
+### Example 4: RAG Query (iOS Swift)
+
+```swift
+// ios/messagingapp/messagingapp/Services/RAGService.swift
+import Foundation
+import FirebaseFunctions
+
+class RAGService {
+    private let functions = Functions.functions()
+    
+    func semanticSearch(query: String, conversationId: String? = nil) async throws -> [SearchResult] {
+        let callable = functions.httpsCallable("semanticSearch")
+        
+        var parameters: [String: Any] = [
+            "query": query,
+            "topK": 10
+        ]
+        
+        if let conversationId = conversationId {
+            parameters["conversationId"] = conversationId
+        }
+        
+        let result = try await callable.call(parameters)
+        
+        guard let data = result.data as? [String: Any],
+              let results = data["results"] as? [[String: Any]] else {
+            throw RAGError.invalidResponse
+        }
+        
+        return results.compactMap { SearchResult(from: $0) }
+    }
+    
+    func answerQuestion(_ question: String, conversationId: String? = nil) async throws -> String {
+        let callable = functions.httpsCallable("answerQuestionWithRAG")
+        
+        let parameters: [String: Any] = [
+            "question": question,
+            "conversationId": conversationId as Any
+        ]
+        
+        let result = try await callable.call(parameters)
+        
+        guard let data = result.data as? [String: Any],
+              let answer = data["answer"] as? String else {
+            throw RAGError.invalidResponse
+        }
+        
+        return answer
+    }
+}
+
+struct SearchResult {
+    let messageId: String
+    let score: Double
+    let preview: String
+    let timestamp: Date
+    
+    init?(from dict: [String: Any]) {
+        guard let messageId = dict["messageId"] as? String,
+              let score = dict["score"] as? Double,
+              let metadata = dict["metadata"] as? [String: Any],
+              let preview = metadata["preview"] as? String,
+              let timestamp = metadata["timestamp"] as? TimeInterval else {
+            return nil
+        }
+        
+        self.messageId = messageId
+        self.score = score
+        self.preview = preview
+        self.timestamp = Date(timeIntervalSince1970: timestamp / 1000)
+    }
+}
+```
+
+---
+
 ## Next Steps
 
 1. **Review this plan** - Adjust timeline and priorities based on constraints
 2. **Set up development environment** - Install Xcode, Firebase, get API keys
 3. **Create Firebase project** - Set up backend infrastructure
-4. **Start with Phase 1** - Build authentication foundation
-5. **Iterate rapidly** - Build MVP first, then add AI features
-6. **Test early and often** - Real devices, real users, real feedback
-7. **Document as you go** - Save time during final documentation phase
+4. **Set up Pinecone account** (for Phase 8+):
+   - Create account at https://www.pinecone.io
+   - Create index: `messaging-app-vectors` (1536 dims, cosine metric)
+   - Generate and save API key
+   - Note environment/region for Cloud Functions config
+5. **Obtain API keys**:
+   - OpenAI API key (https://platform.openai.com)
+   - Pinecone API key (from step 4)
+   - Configure Firebase Functions environment variables
+6. **Start with Phase 1** - Build authentication foundation
+7. **Iterate rapidly** - Build MVP first (Phases 1-4.5), then add AI features (Phases 7-9)
+8. **Test early and often** - Real devices, real users, real feedback
+9. **Document as you go** - Save time during final documentation phase
+10. **Monitor costs** - Track OpenAI and Pinecone usage, optimize as needed
 
 ---
 
@@ -1459,10 +1896,36 @@ Implementation:
 - Regular testing throughout development is crucial for quality
 - Don't underestimate time needed for polish and bug fixes
 
+### Pinecone Vector Database Notes
+- **Cost:** Pinecone pricing starts with a serverless free tier, then pay-as-you-go
+  - Serverless: ~$0.096 per million read units, ~$0.12 per million write units
+  - Consider starting with serverless, upgrade to pod-based for predictable costs at scale
+- **Alternatives:** If budget is constrained, consider:
+  - Chroma DB (free, open-source, self-hosted)
+  - Qdrant (1GB free tier, or self-hosted)
+  - Firestore-only approach (less performant but free)
+  - See [VECTOR_STORE_OPTIONS.md](./VECTOR_STORE_OPTIONS.md) for comparison
+- **When to use Pinecone:**
+  - You need production-grade performance and reliability
+  - You're building for scale (10k+ users)
+  - You have budget for managed services (~$25-100/month)
+  - You want minimal DevOps overhead
+- **Migration path:** Easy to switch between vector stores by updating Cloud Functions
+
 ---
 
 **Document Status:** Ready for Implementation  
-**Last Updated:** October 21, 2025  
-**Version:** 1.1 - Added Phase 4.5: Group Chat
+**Last Updated:** October 23, 2025  
+**Version:** 1.2 - Reimplemented with Pinecone Vector Database
+
+**Change Log:**
+- v1.2 (Oct 23, 2025): Reimplemented vector storage to use Pinecone exclusively
+  - Added detailed Pinecone setup and configuration steps
+  - Expanded Phase 8 with Pinecone-specific implementation details
+  - Added Pinecone metadata schema and best practices
+  - Updated environment setup with Pinecone API keys
+  - Added cost optimization and error handling strategies
+- v1.1 (Oct 21, 2025): Added Phase 4.5: Group Chat
+- v1.0: Initial implementation plan
 
 

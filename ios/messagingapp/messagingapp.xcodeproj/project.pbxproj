@@ -13,6 +13,7 @@
 		3765655C2EA709BB0035F5DA /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 3765655B2EA709BB0035F5DA /* FirebaseMessaging */; };
 		3765655E2EA709BB0035F5DA /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 3765655D2EA709BB0035F5DA /* FirebaseStorage */; };
 		379F03FF2EA850BB0095856B /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 379F03FE2EA850BB0095856B /* WebRTC */; };
+		37F54DE42EA9C6BD008EC501 /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = 37F54DE32EA9C6BD008EC501 /* FirebaseFunctions */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -75,6 +76,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				3765655C2EA709BB0035F5DA /* FirebaseMessaging in Frameworks */,
+				37F54DE42EA9C6BD008EC501 /* FirebaseFunctions in Frameworks */,
 				379F03FF2EA850BB0095856B /* WebRTC in Frameworks */,
 				376565562EA709BB0035F5DA /* FirebaseAnalytics in Frameworks */,
 				376565582EA709BB0035F5DA /* FirebaseAuth in Frameworks */,
@@ -106,6 +108,7 @@
 				376565282EA708190035F5DA /* messagingapp */,
 				376565382EA7081A0035F5DA /* messagingappTests */,
 				376565422EA7081A0035F5DA /* messagingappUITests */,
+				37F54DE52EA9C813008EC501 /* Frameworks */,
 				376565272EA708190035F5DA /* Products */,
 			);
 			sourceTree = "<group>";
@@ -118,6 +121,13 @@
 				3765653F2EA7081A0035F5DA /* messagingappUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		37F54DE52EA9C813008EC501 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -146,6 +156,7 @@
 				3765655B2EA709BB0035F5DA /* FirebaseMessaging */,
 				3765655D2EA709BB0035F5DA /* FirebaseStorage */,
 				379F03FE2EA850BB0095856B /* WebRTC */,
+				37F54DE32EA9C6BD008EC501 /* FirebaseFunctions */,
 			);
 			productName = messagingapp;
 			productReference = 376565262EA708190035F5DA /* messagingapp.app */;
@@ -676,6 +687,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 379F03FD2EA850BB0095856B /* XCRemoteSwiftPackageReference "WebRTC" */;
 			productName = WebRTC;
+		};
+		37F54DE32EA9C6BD008EC501 /* FirebaseFunctions */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 376565542EA709BB0035F5DA /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFunctions;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

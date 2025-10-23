@@ -12,7 +12,11 @@ struct MessageRow: View {
     
     @State private var showingActionMenu = false
     @State private var showingEmojiPicker = false
+    @State private var showingTranslationMenu = false
+    @State private var showingTranslation = false
+    @State private var showingTranslationError = false
     @StateObject private var voiceService = VoiceRecordingService()
+    @StateObject private var translationViewModel = TranslationViewModel()
     
     private var isSentByMe: Bool {
         message.senderId == currentUserId
@@ -20,6 +24,10 @@ struct MessageRow: View {
     
     private var isSystemMessage: Bool {
         message.type == .system
+    }
+    
+    private var translationErrorMessage: String {
+        translationViewModel.translationError ?? "An error occurred"
     }
     
     var body: some View {
@@ -73,6 +81,80 @@ struct MessageRow: View {
                 onReact(emoji)
             }
             .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showingTranslationMenu) {
+            if let messageId = message.id {
+                TranslationMenuView(
+                    messageId: messageId,
+                    conversationId: message.conversationId,
+                    translationViewModel: translationViewModel,
+                    onTranslate: { language in
+                        Task {
+                            await translationViewModel.translateMessage(
+                                messageId: messageId,
+                                conversationId: message.conversationId,
+                                targetLanguage: language,
+                                text: message.text
+                            )
+                            if translationViewModel.currentTranslation != nil {
+                                showingTranslation = true
+                            }
+                        }
+                    }
+                )
+            }
+        }
+        .sheet(isPresented: $showingTranslation) {
+            if let translation = translationViewModel.currentTranslation {
+                TranslationOverlayView(
+                    originalText: translation.originalText,
+                    translatedText: translation.translatedText,
+                    targetLanguage: translation.targetLanguage,
+                    fromCache: translation.fromCache
+                )
+            }
+        }
+        .overlay {
+            if translationViewModel.isTranslating {
+                ZStack {
+                    // Semi-transparent background
+                    Color.black.opacity(0.4)
+                    
+                    // Loading card
+                    VStack(spacing: 12) {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .tint(.blue)
+                        
+                        Text("Translating...")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+                    }
+                    .padding(24)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color(.systemBackground))
+                            .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 5)
+                    )
+                }
+            }
+        }
+        .alert(
+            "Translation Error",
+            isPresented: $showingTranslationError,
+            actions: {
+                Button("OK") {
+                    translationViewModel.translationError = nil
+                    showingTranslationError = false
+                }
+            },
+            message: {
+                Text(translationErrorMessage)
+            }
+        )
+        .onChange(of: translationViewModel.translationError) { oldValue, newValue in
+            showingTranslationError = newValue != nil
         }
     }
     
@@ -412,6 +494,15 @@ struct MessageRow: View {
                 UIPasteboard.general.string = message.text
             } label: {
                 Label("Copy", systemImage: "doc.on.doc")
+            }
+            
+            // Translate (only for text messages with valid IDs)
+            if !message.text.isEmpty && message.type != .system && message.id != nil {
+                Button {
+                    showingTranslationMenu = true
+                } label: {
+                    Label("Translate", systemImage: "globe")
+                }
             }
             
             // Reply in Thread
