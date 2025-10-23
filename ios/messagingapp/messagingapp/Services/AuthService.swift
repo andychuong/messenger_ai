@@ -12,6 +12,7 @@ class AuthService: ObservableObject {
     private let auth = Auth.auth()
     private let db = Firestore.firestore()
     private var authStateHandle: AuthStateDidChangeListenerHandle?
+    private let encryptionService = EncryptionService.shared
     
     static var shared: AuthService?
     
@@ -42,10 +43,31 @@ class AuthService: ObservableObject {
     func signUp(email: String, password: String, displayName: String) async throws {
         let result = try await auth.createUser(withEmail: email, password: password)
         
-        let user = User(id: result.user.uid, email: email, displayName: displayName)
+        // Phase 6: Generate RSA key pair for encryption
+        let publicKeyData = try encryptionService.generateRSAKeyPair(userId: result.user.uid)
+        let publicKeyBase64 = publicKeyData.base64EncodedString()
+        
+        var user = User(id: result.user.uid, email: email, displayName: displayName)
+        var userDict = user.toDictionary()
+        userDict["publicKey"] = publicKeyBase64  // Store public key for key exchange
+        
         try await db.collection(User.collectionName)
             .document(result.user.uid)
-            .setData(user.toDictionary())
+            .setData(userDict)
+        
+        try await updateUserStatus(userId: result.user.uid, status: .online)
+        await fetchUserData(userId: result.user.uid)
+        await setupNotifications(userId: result.user.uid)
+        PresenceService.shared.startMonitoring()
+        
+        print("🔐 Phase 6: Generated encryption keys for new user")
+    }
+    
+    func login(email: String, password: String) async throws {
+        let result = try await auth.signIn(withEmail: email, password: password)
+        
+        // Phase 6: Ensure user has encryption keys
+        await ensureEncryptionKeys(userId: result.user.uid)
         
         try await updateUserStatus(userId: result.user.uid, status: .online)
         await fetchUserData(userId: result.user.uid)
@@ -53,12 +75,28 @@ class AuthService: ObservableObject {
         PresenceService.shared.startMonitoring()
     }
     
-    func login(email: String, password: String) async throws {
-        let result = try await auth.signIn(withEmail: email, password: password)
-        try await updateUserStatus(userId: result.user.uid, status: .online)
-        await fetchUserData(userId: result.user.uid)
-        await setupNotifications(userId: result.user.uid)
-        PresenceService.shared.startMonitoring()
+    // Phase 6: Ensure user has RSA key pair
+    private func ensureEncryptionKeys(userId: String) async {
+        // Check if keys exist in keychain
+        if encryptionService.getPublicKey(userId: userId) == nil {
+            print("🔐 Phase 6: Generating encryption keys for existing user")
+            do {
+                // Generate new keys
+                let publicKeyData = try encryptionService.generateRSAKeyPair(userId: userId)
+                let publicKeyBase64 = publicKeyData.base64EncodedString()
+                
+                // Store public key in Firestore
+                try await db.collection(User.collectionName)
+                    .document(userId)
+                    .updateData(["publicKey": publicKeyBase64])
+                
+                print("🔐 Phase 6: Encryption keys generated and stored")
+            } catch {
+                print("❌ Failed to generate encryption keys: \(error.localizedDescription)")
+            }
+        } else {
+            print("🔐 Phase 6: Encryption keys already exist")
+        }
     }
     
     func logout() async throws {
@@ -66,6 +104,10 @@ class AuthService: ObservableObject {
             PresenceService.shared.stopMonitoring()
             try? await updateUserStatus(userId: userId, status: .offline)
             await NotificationService.shared.removeTokenFromFirestore(userId: userId)
+            
+            // Phase 6: Delete all encryption keys from keychain
+            encryptionService.deleteAllUserKeys(userId: userId)
+            print("🔐 Phase 6: Deleted all encryption keys on logout")
         }
         
         try auth.signOut()

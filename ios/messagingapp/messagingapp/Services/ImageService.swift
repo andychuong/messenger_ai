@@ -17,6 +17,7 @@ class ImageService {
     
     private let storage = Storage.storage()
     private let messageService = MessageService()
+    private let encryptionService = EncryptionService.shared
     
     // MARK: - Pick Image
     
@@ -92,8 +93,11 @@ class ImageService {
             throw ImageServiceError.notAuthenticated
         }
         
+        // Encrypt image data before upload
+        let encryptedData = try encryptionService.encryptFile(imageData, conversationId: conversationId)
+        
         // Create unique filename
-        let filename = "\(UUID().uuidString).jpg"
+        let filename = "\(UUID().uuidString).enc"  // .enc extension for encrypted
         let path = "images/\(conversationId)/\(filename)"
         
         // Create storage reference
@@ -101,15 +105,16 @@ class ImageService {
         
         // Set metadata
         let metadata = StorageMetadata()
-        metadata.contentType = "image/jpeg"
+        metadata.contentType = "application/octet-stream"  // Encrypted binary data
         metadata.customMetadata = [
             "uploadedBy": userId,
             "conversationId": conversationId,
-            "uploadedAt": "\(Date().timeIntervalSince1970)"
+            "uploadedAt": "\(Date().timeIntervalSince1970)",
+            "encrypted": "true"
         ]
         
-        // Upload
-        _ = try await storageRef.putDataAsync(imageData, metadata: metadata)
+        // Upload encrypted data
+        _ = try await storageRef.putDataAsync(encryptedData, metadata: metadata)
         
         // Get download URL
         let downloadURL = try await storageRef.downloadURL()
@@ -150,10 +155,35 @@ class ImageService {
     
     // MARK: - Download Image
     
-    /// Download image from URL
+    /// Download and decrypt image from URL
+    /// - Parameters:
+    ///   - urlString: Image URL
+    ///   - conversationId: Conversation ID for decryption key
+    /// - Returns: Downloaded and decrypted UIImage
+    func downloadImage(from urlString: String, conversationId: String) async throws -> UIImage {
+        guard let url = URL(string: urlString) else {
+            throw ImageServiceError.invalidURL
+        }
+        
+        // Download encrypted data
+        let (encryptedData, _) = try await URLSession.shared.data(from: url)
+        
+        // Decrypt the data
+        let decryptedData = try encryptionService.decryptFile(encryptedData, conversationId: conversationId)
+        
+        // Convert to UIImage
+        guard let image = UIImage(data: decryptedData) else {
+            throw ImageServiceError.invalidImageData
+        }
+        
+        return image
+    }
+    
+    /// Download image from URL (legacy method without encryption)
+    /// This is kept for backward compatibility with old unencrypted images
     /// - Parameter urlString: Image URL
     /// - Returns: Downloaded UIImage
-    func downloadImage(from urlString: String) async throws -> UIImage {
+    func downloadImageLegacy(from urlString: String) async throws -> UIImage {
         guard let url = URL(string: urlString) else {
             throw ImageServiceError.invalidURL
         }

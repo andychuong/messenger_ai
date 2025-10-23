@@ -14,6 +14,7 @@ import Combine
 class MessageService: ObservableObject {
     private let db = Firestore.firestore()
     private let conversationService = ConversationService()
+    private let encryptionService = EncryptionService.shared
     
     // MARK: - Send Message
     
@@ -30,12 +31,15 @@ class MessageService: ObservableObject {
             throw NSError(domain: "MessageService", code: 404, userInfo: [NSLocalizedDescriptionKey: "User data not found"])
         }
         
-        // Create message
-        let message = Message.create(
+        // Encrypt message text
+        let encryptedText = try encryptionService.encryptMessage(text, conversationId: conversationId)
+        
+        // Create message with encrypted text
+        var message = Message.create(
             conversationId: conversationId,
             senderId: currentUser.uid,
             senderName: displayName,
-            text: text
+            text: encryptedText  // Store encrypted text
         )
         
         // Save to Firestore
@@ -48,12 +52,13 @@ class MessageService: ObservableObject {
         // Update message status to sent
         try await docRef.updateData(["status": MessageStatus.sent.rawValue])
         
-        // Create message with ID
+        // Create message with ID and decrypted text for local display
         var sentMessage = message
         sentMessage.id = docRef.documentID
         sentMessage.status = .sent
+        sentMessage.text = text  // Use original unencrypted text for local display
         
-        // Update conversation's last message
+        // Update conversation's last message (with decrypted preview)
         try await conversationService.updateLastMessage(conversationId: conversationId, message: sentMessage)
         
         return sentMessage
@@ -171,11 +176,45 @@ class MessageService: ObservableObject {
         
         let snapshot = try await query.getDocuments()
         
-        let messages = try snapshot.documents.compactMap { document in
-            try document.data(as: Message.self)
+        let messages = try snapshot.documents.compactMap { document -> Message? in
+            guard let message = try? document.data(as: Message.self) else { return nil }
+            
+            // Decrypt message using helper that handles both encrypted and legacy plain text
+            return decryptMessage(message, conversationId: conversationId)
         }
         
         return messages.reversed()  // Return in chronological order
+    }
+    
+    // MARK: - Helper: Decrypt Message
+    
+    /// Decrypt a single message
+    /// Handles both encrypted (new) and plain text (legacy) messages
+    private func decryptMessage(_ message: Message, conversationId: String) -> Message {
+        var decryptedMessage = message
+        
+        // Skip decryption for system messages or empty text
+        if message.type != .system && !message.text.isEmpty {
+            // Try to decrypt - if it fails, assume it's a legacy plain text message
+            if let decrypted = try? encryptionService.decryptMessage(message.text, conversationId: conversationId) {
+                decryptedMessage.text = decrypted
+            } else {
+                // If decryption fails, check if it looks like base64 (encrypted)
+                // Base64 strings are typically longer and contain only alphanumeric + / =
+                let isLikelyEncrypted = message.text.count > 100 && 
+                                       message.text.range(of: "^[A-Za-z0-9+/=]+$", options: .regularExpression) != nil
+                
+                if isLikelyEncrypted {
+                    // Looks encrypted but failed to decrypt - show fallback
+                    decryptedMessage.text = "[Encrypted]"
+                } else {
+                    // Looks like plain text - use as-is (legacy message)
+                    decryptedMessage.text = message.text
+                }
+            }
+        }
+        
+        return decryptedMessage
     }
     
     // MARK: - Mark as Delivered
@@ -286,10 +325,13 @@ class MessageService: ObservableObject {
             throw NSError(domain: "MessageService", code: 403, userInfo: [NSLocalizedDescriptionKey: "You can only edit your own messages"])
         }
         
+        // Encrypt new text
+        let encryptedNewText = try encryptionService.encryptMessage(newText, conversationId: conversationId)
+        
         // Update message
         try await messageRef.updateData([
-            "originalText": message.text,
-            "text": newText,
+            "originalText": message.text,  // Keep encrypted original
+            "text": encryptedNewText,
             "editedAt": Date()
         ])
     }
@@ -333,14 +375,18 @@ class MessageService: ObservableObject {
             .collection("messages")
             .order(by: "timestamp", descending: false)
             .limit(toLast: limit)
-            .addSnapshotListener { snapshot, error in
+            .addSnapshotListener { [weak self] snapshot, error in
+                guard let self = self else { return }
                 guard let documents = snapshot?.documents else {
                     print("Error fetching messages: \(error?.localizedDescription ?? "Unknown error")")
                     return
                 }
                 
-                let messages = documents.compactMap { document in
-                    try? document.data(as: Message.self)
+                let messages = documents.compactMap { document -> Message? in
+                    guard let message = try? document.data(as: Message.self) else { return nil }
+                    
+                    // Decrypt using helper that handles both encrypted and legacy plain text
+                    return self.decryptMessage(message, conversationId: conversationId)
                 }
                 
                 completion(messages)
@@ -386,12 +432,15 @@ class MessageService: ObservableObject {
             throw NSError(domain: "MessageService", code: 404, userInfo: [NSLocalizedDescriptionKey: "User data not found"])
         }
         
-        // Create message with thread reference
+        // Encrypt message text
+        let encryptedText = try encryptionService.encryptMessage(text, conversationId: conversationId)
+        
+        // Create message with thread reference and encrypted text
         var message = Message.create(
             conversationId: conversationId,
             senderId: currentUser.uid,
             senderName: displayName,
-            text: text
+            text: encryptedText
         )
         message.replyTo = parentMessageId
         
@@ -405,10 +454,11 @@ class MessageService: ObservableObject {
         // Update message status to sent
         try await docRef.updateData(["status": MessageStatus.sent.rawValue])
         
-        // Create message with ID
+        // Create message with ID and decrypted text
         var sentMessage = message
         sentMessage.id = docRef.documentID
         sentMessage.status = .sent
+        sentMessage.text = text  // Use original unencrypted text for local display
         
         // Update thread count on parent message
         try await updateThreadCount(conversationId: conversationId, parentMessageId: parentMessageId)
@@ -426,8 +476,11 @@ class MessageService: ObservableObject {
             .limit(to: limit)
             .getDocuments()
         
-        let messages = try snapshot.documents.compactMap { document in
-            try document.data(as: Message.self)
+        let messages = try snapshot.documents.compactMap { document -> Message? in
+            guard let message = try? document.data(as: Message.self) else { return nil }
+            
+            // Decrypt using helper that handles both encrypted and legacy plain text
+            return decryptMessage(message, conversationId: conversationId)
         }
         
         return messages
@@ -440,14 +493,18 @@ class MessageService: ObservableObject {
             .collection("messages")
             .whereField("replyTo", isEqualTo: parentMessageId)
             .order(by: "timestamp", descending: false)
-            .addSnapshotListener { snapshot, error in
+            .addSnapshotListener { [weak self] snapshot, error in
+                guard let self = self else { return }
                 guard let documents = snapshot?.documents else {
                     print("Error fetching thread replies: \(error?.localizedDescription ?? "Unknown error")")
                     return
                 }
                 
-                let messages = documents.compactMap { document in
-                    try? document.data(as: Message.self)
+                let messages = documents.compactMap { document -> Message? in
+                    guard let message = try? document.data(as: Message.self) else { return nil }
+                    
+                    // Decrypt using helper that handles both encrypted and legacy plain text
+                    return self.decryptMessage(message, conversationId: conversationId)
                 }
                 
                 completion(messages)
