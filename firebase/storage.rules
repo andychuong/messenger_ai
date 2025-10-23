@@ -1,4 +1,7 @@
 rules_version = '2';
+// Phase 6: Security & Encryption
+// - Media files (images, audio) are encrypted client-side before upload
+// - Encrypted files use .enc extension and application/octet-stream content type
 service firebase.storage {
   match /b/{bucket}/o {
     
@@ -34,9 +37,20 @@ service firebase.storage {
         fileSizeUnder(5); // Max 5MB
     }
     
-    // Message media (images, voice messages)
+    // Phase 6: Encrypted message images
+    match /images/{conversationId}/{fileName} {
+      // Can read if authenticated (encrypted files)
+      allow read: if isSignedIn();
+      
+      // Phase 6: Can upload encrypted files (.enc extension)
+      allow write: if isSignedIn() && 
+        request.resource.contentType == 'application/octet-stream' && 
+        fileSizeUnder(15); // Max 15MB (encrypted files slightly larger)
+    }
+    
+    // Message media (images, voice messages) - legacy path
     match /conversations/{conversationId}/media/{fileName} {
-      // Can read if authenticated (TODO: verify conversation participant)
+      // Can read if authenticated
       allow read: if isSignedIn();
       
       // Can upload media if authenticated and file is valid

@@ -1,4 +1,9 @@
 rules_version = '2';
+// Phase 6: Security & Encryption
+// - Messages and images are encrypted client-side with AES-256-GCM
+// - User RSA public keys stored for key exchange
+// - Strict validation of message structure and data types
+// - Participant-only access to conversations and messages
 service cloud.firestore {
   match /databases/{database}/documents {
     
@@ -20,8 +25,18 @@ service cloud.firestore {
       // Users can read their own profile and profiles of any user (for friend discovery)
       allow read: if isSignedIn();
       
-      // Users can only write to their own profile
-      allow create, update: if isOwner(userId);
+      // Phase 6: Users can only write to their own profile
+      // Validate required fields
+      allow create: if isOwner(userId) &&
+        request.resource.data.keys().hasAll(['email', 'displayName']) &&
+        request.resource.data.email is string &&
+        request.resource.data.displayName is string &&
+        request.resource.data.displayName.size() > 0 &&
+        request.resource.data.displayName.size() <= 50;
+      
+      // Phase 6: Allow updates including public key for E2EE
+      allow update: if isOwner(userId) &&
+        request.resource.data.email == resource.data.email; // Cannot change email
       
       // Cannot delete user documents (handle via Cloud Function)
       allow delete: if false;
@@ -97,17 +112,28 @@ service cloud.firestore {
         allow read: if isSignedIn() && 
           isParticipant(get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants);
         
-        // Phase 4.5: Can create message if you're a participant and the sender
-        // OR if it's a system message (senderId == "system")
+        // Phase 6: Enhanced message creation rules with validation
+        // - Messages are encrypted client-side before storage
+        // - Text field contains encrypted data (base64 encoded)
+        // - Validates required fields and data types
         allow create: if isSignedIn() && 
           isParticipant(get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants) &&
           (request.auth.uid == request.resource.data.senderId || 
            request.resource.data.senderId == "system") &&
-          request.resource.data.text.size() <= 10000; // Max 10k characters
+          request.resource.data.text is string &&
+          request.resource.data.text.size() > 0 &&
+          request.resource.data.text.size() <= 20000 && // Encrypted text is larger
+          request.resource.data.senderId is string &&
+          request.resource.data.senderName is string &&
+          request.resource.data.timestamp is timestamp &&
+          request.resource.data.status is string;
         
-        // Can update message for status changes and reactions
+        // Phase 6: Can update message for status changes, reactions, and edits
+        // Cannot change core message fields (senderId, conversationId)
         allow update: if isSignedIn() && 
-          isParticipant(get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants);
+          isParticipant(get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants) &&
+          request.resource.data.senderId == resource.data.senderId &&
+          request.resource.data.conversationId == resource.data.conversationId;
         
         // Can delete own messages only (or system messages by admins)
         allow delete: if isSignedIn() && (
