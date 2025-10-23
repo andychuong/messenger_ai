@@ -127,6 +127,18 @@ service cloud.firestore {
         
         allow delete: if false;
       }
+      
+      // Typing indicators subcollection
+      match /typing/{userId} {
+        // Can read typing status if you're a participant in the conversation
+        allow read: if isSignedIn() && 
+          isParticipant(get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants);
+        
+        // Can write your own typing status if you're a participant
+        allow create, update, delete: if isSignedIn() && 
+          isOwner(userId) &&
+          isParticipant(get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants);
+      }
     }
     
     // Calls collection
