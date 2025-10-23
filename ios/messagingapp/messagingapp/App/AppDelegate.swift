@@ -17,13 +17,14 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
     func application(_ application: UIApplication,
                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         
+        // DISABLED FOR TESTING: Push notifications disabled to allow device testing without APNs
         // Set notification center delegate
-        UNUserNotificationCenter.current().delegate = self
+        // UNUserNotificationCenter.current().delegate = self
         
         // Configure notification service
-        NotificationService.shared.configure()
+        // NotificationService.shared.configure()
         
-        print("✅ AppDelegate: didFinishLaunchingWithOptions")
+        print("✅ AppDelegate: didFinishLaunchingWithOptions (Push notifications disabled)")
         return true
     }
     
@@ -31,15 +32,15 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
     
     func application(_ application: UIApplication,
                     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
-        print("✅ APNs device token received")
-        
-        // Pass device token to Firebase
-        Messaging.messaging().apnsToken = deviceToken
+        // DISABLED FOR TESTING
+        // print("✅ APNs device token received")
+        // Messaging.messaging().apnsToken = deviceToken
     }
     
     func application(_ application: UIApplication,
                     didFailToRegisterForRemoteNotificationsWithError error: Error) {
-        print("❌ Failed to register for remote notifications: \(error)")
+        // DISABLED FOR TESTING
+        // print("❌ Failed to register for remote notifications: \(error)")
     }
     
     // MARK: - Notification Handling (Foreground)
@@ -48,12 +49,10 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                willPresent notification: UNNotification,
                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-        let userInfo = notification.request.content.userInfo
-        
-        print("📬 Notification received in foreground: \(userInfo)")
-        
-        // Show notification even when app is in foreground
-        completionHandler([.banner, .sound, .badge])
+        // DISABLED FOR TESTING
+        // let userInfo = notification.request.content.userInfo
+        // print("📬 Notification received in foreground: \(userInfo)")
+        completionHandler([])
     }
     
     // MARK: - Notification Tap Handling
@@ -62,19 +61,16 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                didReceive response: UNNotificationResponse,
                                withCompletionHandler completionHandler: @escaping () -> Void) {
-        let userInfo = response.notification.request.content.userInfo
-        
-        print("👆 Notification tapped: \(userInfo)")
-        
-        // Handle deep linking
-        if let conversationId = NotificationService.shared.handleNotificationTap(userInfo: userInfo) {
-            // Post notification for app to handle navigation
-            NotificationCenter.default.post(
-                name: NSNotification.Name("OpenConversation"),
-                object: nil,
-                userInfo: ["conversationId": conversationId]
-            )
-        }
+        // DISABLED FOR TESTING
+        // let userInfo = response.notification.request.content.userInfo
+        // print("👆 Notification tapped: \(userInfo)")
+        // if let conversationId = NotificationService.shared.handleNotificationTap(userInfo: userInfo) {
+        //     NotificationCenter.default.post(
+        //         name: NSNotification.Name("OpenConversation"),
+        //         object: nil,
+        //         userInfo: ["conversationId": conversationId]
+        //     )
+        // }
         
         completionHandler()
     }

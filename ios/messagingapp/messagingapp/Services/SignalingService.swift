@@ -83,38 +83,73 @@ class SignalingService: ObservableObject {
     
     // MARK: - Listen for Call Updates
     
+    private var processedCandidates = Set<String>()
+    
+    private var processedAnswers = Set<String>()
+    
     private func listenForCallUpdates(callId: String) {
+        print("🎧 Setting up listener for call updates: \(callId)")
         db.collection(Call.collectionName)
             .document(callId)
             .addSnapshotListener { [weak self] snapshot, error in
-                guard let data = snapshot?.data() else { return }
+                guard let self = self else { return }
+                
+                if let error = error {
+                    print("❌ Error in call listener: \(error.localizedDescription)")
+                    return
+                }
+                
+                guard let data = snapshot?.data() else {
+                    print("⚠️ No data in call snapshot")
+                    return
+                }
+                
+                print("📡 Call update received for \(callId)")
                 
                 // Check for SDP answer
                 if let sdpAnswer = data["sdpAnswer"] as? String {
-                    self?.onCallAnswered?(sdpAnswer)
+                    if !self.processedAnswers.contains(callId) {
+                        print("📥 Received SDP answer, length: \(sdpAnswer.count)")
+                        self.processedAnswers.insert(callId)
+                        self.onCallAnswered?(sdpAnswer)
+                    }
                 }
                 
                 // Check for status changes
                 if let statusString = data["status"] as? String,
                    let status = Call.CallStatus(rawValue: statusString) {
+                    print("📊 Call status: \(status.rawValue)")
                     if status == .ended || status == .declined {
-                        self?.onCallEnded?()
+                        print("☎️ Call ended or declined")
+                        self.onCallEnded?()
                     }
                 }
                 
-                // Check for ICE candidates
+                // Check for new ICE candidates
                 if let candidates = data["iceCandidates"] as? [[String: String]] {
                     for candidateDict in candidates {
                         if let sdp = candidateDict["candidate"],
                            let sdpMLineIndex = candidateDict["sdpMLineIndex"],
                            let sdpMid = candidateDict["sdpMid"],
                            let lineIndex = Int32(sdpMLineIndex) {
-                            let candidate = RTCIceCandidate(
-                                sdp: sdp,
-                                sdpMLineIndex: lineIndex,
-                                sdpMid: sdpMid
-                            )
-                            self?.onIceCandidate?(candidate)
+                            
+                            // Create a unique key for this candidate
+                            let candidateKey = "\(sdp)_\(sdpMLineIndex)_\(sdpMid)"
+                            
+                            // Only process if we haven't seen this candidate before
+                            if !self.processedCandidates.contains(candidateKey) {
+                                self.processedCandidates.insert(candidateKey)
+                                print("🧊 Processing new ICE candidate")
+                                
+                                let candidate = RTCIceCandidate(
+                                    sdp: sdp,
+                                    sdpMLineIndex: lineIndex,
+                                    sdpMid: sdpMid
+                                )
+                                self.onIceCandidate?(candidate)
+                            } else {
+                                print("⏭️ Skipping duplicate ICE candidate")
+                            }
                         }
                     }
                 }
@@ -132,7 +167,8 @@ class SignalingService: ObservableObject {
             .document(callId)
             .updateData([
                 "sdpAnswer": sdpAnswer,
-                "status": Call.CallStatus.active.rawValue
+                "status": Call.CallStatus.active.rawValue,
+                "connectedAt": Timestamp(date: Date())
             ]) { error in
                 completion(error)
             }
@@ -215,6 +251,8 @@ class SignalingService: ObservableObject {
     func stopListening() {
         callListener?.remove()
         callListener = nil
+        processedCandidates.removeAll()
+        processedAnswers.removeAll()
     }
     
     deinit {

@@ -131,14 +131,22 @@ class CallViewModel: ObservableObject {
     // MARK: - Answer Call
     
     func answerCall() {
-        guard let call = incomingCall else { return }
+        guard let call = incomingCall else {
+            print("❌ No incoming call to answer")
+            return
+        }
+        
+        print("📞 Answering call: \(call.id ?? "no-id"), type: \(call.type.rawValue)")
         
         // Check if video call requires permissions
         if call.type == .video && !hasPermissions {
+            print("⚠️ Video call requires permissions, requesting...")
             requestPermissions { [weak self] granted in
                 if granted {
+                    print("✅ Permissions granted, retrying answer")
                     self?.answerCall()
                 } else {
+                    print("❌ Permissions denied")
                     self?.errorMessage = "Camera permission is required for video calls"
                     self?.declineCall()
                 }
@@ -146,11 +154,14 @@ class CallViewModel: ObservableObject {
             return
         }
         
+        print("🔄 Calling CallService.answerCall...")
         callService.answerCall(call) { [weak self] error in
             if let error = error {
+                print("❌ Failed to answer call: \(error.localizedDescription)")
                 self?.errorMessage = "Failed to answer call: \(error.localizedDescription)"
                 self?.showIncomingCall = false
             } else {
+                print("✅ Call answered successfully")
                 DispatchQueue.main.async {
                     self?.showIncomingCall = false
                     self?.showActiveCall = true
@@ -164,13 +175,20 @@ class CallViewModel: ObservableObject {
     func declineCall() {
         guard let call = incomingCall else { return }
         
-        callService.declineCall(call) { [weak self] error in
+        print("🚫 Declining call - updating UI immediately")
+        
+        // Update UI immediately for instant feedback
+        DispatchQueue.main.async { [weak self] in
+            self?.incomingCall = nil
+            self?.showIncomingCall = false
+        }
+        
+        // Background cleanup (Firestore)
+        callService.declineCall(call) { error in
             if let error = error {
-                print("❌ Error declining call: \(error)")
-            }
-            DispatchQueue.main.async {
-                self?.incomingCall = nil
-                self?.showIncomingCall = false
+                print("❌ Error declining call in Firestore: \(error)")
+            } else {
+                print("✅ Call declined in Firestore")
             }
         }
     }
@@ -187,9 +205,19 @@ class CallViewModel: ObservableObject {
     // MARK: - End Call
     
     func endCall() {
+        print("🔚 Ending call - updating UI immediately")
+        
+        // Update UI immediately for instant feedback
+        DispatchQueue.main.async { [weak self] in
+            self?.showActiveCall = false
+            self?.showIncomingCall = false
+            self?.currentCall = nil
+            self?.incomingCall = nil
+            self?.isInCall = false
+        }
+        
+        // Background cleanup (Firestore, WebRTC)
         callService.endCall()
-        showActiveCall = false
-        showIncomingCall = false
     }
     
     // MARK: - Controls

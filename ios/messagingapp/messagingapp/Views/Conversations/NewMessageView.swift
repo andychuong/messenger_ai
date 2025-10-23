@@ -10,13 +10,15 @@ import SwiftUI
 struct NewMessageView: View {
     @StateObject private var friendsViewModel = FriendsListViewModel()
     @StateObject private var conversationViewModel = ConversationListViewModel()
+    @EnvironmentObject private var callViewModel: CallViewModel
+    @EnvironmentObject private var toastManager: ToastManager
     @Environment(\.dismiss) private var dismiss
     
     @State private var searchText = ""
     @State private var isCreatingConversation = false
     @State private var selectedConversation: Conversation?
     @State private var navigateToChat = false
-    @State private var showingCreateGroup = false  // Phase 4.5
+    @State private var showingCreateGroup = false
     
     var body: some View {
         NavigationStack {
@@ -230,5 +232,7 @@ struct NewMessageView: View {
 
 #Preview {
     NewMessageView()
+        .environmentObject(CallViewModel())
+        .environmentObject(ToastManager())
 }
 

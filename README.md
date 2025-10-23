@@ -189,10 +189,26 @@ firebase emulators:start
 ```
 
 ### Test on Physical Device
+
+⚠️ **Important for Voice/Video Calls**: 
+- **iOS Simulator does NOT support audio/video** in WebRTC calls
+- This is a simulator limitation, not a bug in the app
+- Call signaling, UI, and connections work in simulator
+- **Physical iPhones are required** to test actual audio/video transmission
+- See `docs/CALLING_TESTING_GUIDE.md` for complete details
+
+🔕 **Push Notifications Currently Disabled**:
+- Push notifications are **disabled by default** to allow easy device testing
+- This means **no background notifications** when app is closed
+- All features work when app is **open or in foreground**
+- See `docs/PUSH_NOTIFICATIONS_DISABLED.md` for details and how to re-enable
+
+**Setup for Physical Device Testing:**
 1. Connect iPhone via USB
 2. Select device in Xcode
 3. Build and run (Cmd+R)
-4. Test with two devices for messaging/calling
+4. Keep app open/foreground to receive messages and calls
+5. Test with two devices for messaging/calling
 
 ## 📱 Development Phases
 
@@ -316,11 +332,15 @@ See [APP_PLAN.md](./docs/APP_PLAN.md) for detailed implementation plan.
 - [PHASE4_TESTING_PLAN.md](./docs/PHASE4_TESTING_PLAN.md) - Threading testing
 - [PHASE4.5_TESTING_GUIDE.md](./docs/PHASE4.5_TESTING_GUIDE.md) - Group chat testing
 - [PHASE5_TESTING_GUIDE.md](./docs/PHASE5_TESTING_GUIDE.md) - Calling testing
+- [CALLING_TESTING_GUIDE.md](./docs/CALLING_TESTING_GUIDE.md) - ⚠️ Simulator vs Device testing
 
 #### Technical Guides
 - [FCM_SETUP_COMPLETE.md](./docs/FCM_SETUP_COMPLETE.md) - Firebase Cloud Messaging setup
+- [PUSH_NOTIFICATIONS_DISABLED.md](./docs/PUSH_NOTIFICATIONS_DISABLED.md) - 🔕 Push notifications disabled for testing
 - [PHASE5_WEBRTC_PACKAGE.md](./docs/PHASE5_WEBRTC_PACKAGE.md) - WebRTC implementation
+- [CALLING_FIXES.md](./docs/CALLING_FIXES.md) - Calling feature fixes & issues resolved
 - [THREAD_UI_CLEANUP.md](./docs/THREAD_UI_CLEANUP.md) - UI cleanup notes
+- [CRASH_FIX_ENVIRONMENT_OBJECT.md](./docs/CRASH_FIX_ENVIRONMENT_OBJECT.md) - Environment object crash fixes
 
 ### External Resources
 - [Firebase Documentation](https://firebase.google.com/docs)

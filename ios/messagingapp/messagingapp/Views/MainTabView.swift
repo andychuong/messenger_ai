@@ -11,8 +11,10 @@ struct MainTabView: View {
     @EnvironmentObject var authService: AuthService
     @StateObject private var toastManager = ToastManager()
     @StateObject private var messageListener = MessageToastListener()
+    @StateObject private var callViewModel = CallViewModel()
     
     var body: some View {
+        ZStack {
         TabView {
             // Conversations tab
             ConversationListView()
@@ -20,12 +22,15 @@ struct MainTabView: View {
                     Label("Messages", systemImage: "message.fill")
                 }
                 .environmentObject(toastManager)
+                .environmentObject(callViewModel)
             
             // Friends tab
             FriendsListView()
                 .tabItem {
                     Label("Friends", systemImage: "person.2.fill")
                 }
+                .environmentObject(toastManager)
+                .environmentObject(callViewModel)
             
             // AI Assistant tab
             NavigationStack {
@@ -34,6 +39,7 @@ struct MainTabView: View {
             .tabItem {
                 Label("AI", systemImage: "sparkles")
             }
+            .environmentObject(callViewModel)
             
             // Profile tab
             NavigationStack {
@@ -42,6 +48,7 @@ struct MainTabView: View {
             .tabItem {
                 Label("Profile", systemImage: "person.fill")
             }
+            .environmentObject(callViewModel)
         }
         .toastContainer(toastManager: toastManager) { conversationId in
             // Handle toast tap - navigate to conversation
@@ -52,6 +59,29 @@ struct MainTabView: View {
         }
         .onDisappear {
             messageListener.stopListening()
+        }
+        
+        // Global incoming call overlay
+        if callViewModel.showIncomingCall, let call = callViewModel.incomingCall {
+            IncomingCallView(
+                call: call,
+                onAnswer: {
+                    callViewModel.answerCall()
+                },
+                onDecline: {
+                    callViewModel.declineCall()
+                }
+            )
+            .transition(.move(edge: .bottom))
+            .zIndex(100)
+        }
+        
+        // Global active call overlay
+        if callViewModel.showActiveCall, let call = callViewModel.currentCall {
+            ActiveCallView(call: call)
+                .transition(.move(edge: .bottom))
+                .zIndex(101)
+        }
         }
     }
 }

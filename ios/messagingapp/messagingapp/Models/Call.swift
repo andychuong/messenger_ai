@@ -15,6 +15,7 @@ struct Call: Identifiable, Codable {
     var type: CallType
     var status: CallStatus
     var startedAt: Date
+    var connectedAt: Date?
     var endedAt: Date?
     var duration: TimeInterval?
     var sdpOffer: String?
@@ -52,6 +53,7 @@ struct Call: Identifiable, Codable {
         self.type = type
         self.status = status
         self.startedAt = Date()
+        self.connectedAt = nil
         self.endedAt = nil
         self.duration = nil
         self.sdpOffer = nil
@@ -70,6 +72,9 @@ struct Call: Identifiable, Codable {
             "iceCandidates": iceCandidates
         ]
         
+        if let connectedAt = connectedAt {
+            dict["connectedAt"] = Timestamp(date: connectedAt)
+        }
         if let endedAt = endedAt {
             dict["endedAt"] = Timestamp(date: endedAt)
         }

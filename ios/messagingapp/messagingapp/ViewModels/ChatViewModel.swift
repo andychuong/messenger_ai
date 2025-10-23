@@ -18,8 +18,11 @@ class ChatViewModel: ObservableObject {
     @Published var showingImagePicker = false
     @Published var selectedImage: UIImage?
     @Published var showingVoiceRecorder = false
+    @Published var typingText: String? = nil
     
     let voiceService = VoiceRecordingService()
+    private var typingIndicator = TypingIndicatorService()
+    private var typingCancellable: AnyCancellable?
     
     private let messageService = MessageService()
     private let conversationService = ConversationService()
@@ -28,6 +31,10 @@ class ChatViewModel: ObservableObject {
     private var conversationListener: ListenerRegistration?
     private var userStatusListener: ListenerRegistration?
     private let db = Firestore.firestore()
+    private var typingDebounceTask: Task<Void, Never>?
+    
+    // Track if the chat is actively being viewed
+    var isChatActive = false
     
     let conversationId: String
     let otherUserId: String
@@ -79,10 +86,15 @@ class ChatViewModel: ObservableObject {
     }
     
     func setupRealtimeListeners() {
+        guard let currentUserId = currentUserId else { return }
+        
         messagesListener = messageService.listenToMessages(conversationId: conversationId) { [weak self] messages in
             Task { @MainActor in
                 self?.messages = messages
-                await self?.markAllMessagesAsRead()
+                // Only mark as read if chat is actively being viewed
+                if self?.isChatActive == true {
+                    await self?.markAllMessagesAsRead()
+                }
             }
         }
         
@@ -95,6 +107,74 @@ class ChatViewModel: ObservableObject {
         if !isGroupChat && !otherUserId.isEmpty {
             setupUserStatusListener()
         }
+        
+        // Start listening for typing indicators
+        startTypingListener(currentUserId: currentUserId)
+    }
+    
+    // MARK: - Typing Indicators
+    
+    private func startTypingListener(currentUserId: String) {
+        // Build user names map for group chats
+        var userNames: [String: String] = [:]
+        if let conversation = conversation {
+            for (userId, detail) in conversation.participantDetails {
+                userNames[userId] = detail.name
+            }
+        }
+        
+        typingIndicator.startListening(
+            conversationId: conversationId,
+            currentUserId: currentUserId,
+            userNames: userNames
+        )
+        
+        // Observe typing text changes and publish to ChatViewModel
+        typingCancellable = typingIndicator.$typingText
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] newTypingText in
+                self?.typingText = newTypingText
+            }
+    }
+    
+    func handleTextChange() {
+        guard let currentUserId = currentUserId else { return }
+        
+        // Cancel previous debounce task
+        typingDebounceTask?.cancel()
+        
+        if !messageText.isEmpty {
+            // User is typing - send status
+            typingIndicator.setTyping(
+                conversationId: conversationId,
+                userId: currentUserId,
+                isTyping: true
+            )
+            
+            // Debounce - clear typing after 3 seconds of no activity
+            typingDebounceTask = Task {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                guard !Task.isCancelled else { return }
+                self.clearTypingStatus()
+            }
+        } else {
+            // Text is empty - clear typing status
+            clearTypingStatus()
+        }
+    }
+    
+    func clearTypingStatus() {
+        guard let currentUserId = currentUserId else { return }
+        typingIndicator.setTyping(
+            conversationId: conversationId,
+            userId: currentUserId,
+            isTyping: false
+        )
+    }
+    
+    func stopTypingListener() {
+        typingIndicator.stopListening()
+        typingCancellable?.cancel()
     }
     
     private func setupUserStatusListener() {
@@ -121,7 +201,10 @@ class ChatViewModel: ObservableObject {
         do {
             let loadedMessages = try await messageService.fetchMessages(conversationId: conversationId, limit: 50)
             messages = loadedMessages
-            await markAllMessagesAsRead()
+            // Only mark as read if chat is actively being viewed
+            if isChatActive {
+                await markAllMessagesAsRead()
+            }
         } catch {
             errorMessage = "Failed to load messages: \(error.localizedDescription)"
             print("Error loading messages: \(error)")
@@ -142,6 +225,9 @@ class ChatViewModel: ObservableObject {
         
         let textToSend = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
         messageText = ""
+        
+        // Clear typing status immediately when sending
+        clearTypingStatus()
         
         isSending = true
         errorMessage = nil

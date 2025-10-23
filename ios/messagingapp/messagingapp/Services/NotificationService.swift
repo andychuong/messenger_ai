@@ -28,55 +28,61 @@ class NotificationService: NSObject, ObservableObject {
     // MARK: - Request Notification Permission
     
     func requestPermission() async -> Bool {
-        do {
-            let center = UNUserNotificationCenter.current()
-            let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
-            
-            await MainActor.run {
-                self.notificationPermissionGranted = granted
-            }
-            
-            if granted {
-                print("✅ Notification permission granted")
-                // Register for remote notifications on main thread
-                await MainActor.run {
-                    UIApplication.shared.registerForRemoteNotifications()
-                }
-            } else {
-                print("❌ Notification permission denied")
-            }
-            
-            return granted
-        } catch {
-            print("❌ Error requesting notification permission: \(error)")
-            return false
-        }
+        // DISABLED FOR TESTING: Push notifications disabled
+        print("⚠️ Push notifications disabled - permission request skipped")
+        return false
+        
+        // do {
+        //     let center = UNUserNotificationCenter.current()
+        //     let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
+        //     
+        //     await MainActor.run {
+        //         self.notificationPermissionGranted = granted
+        //     }
+        //     
+        //     if granted {
+        //         print("✅ Notification permission granted")
+        //         await MainActor.run {
+        //             UIApplication.shared.registerForRemoteNotifications()
+        //         }
+        //     } else {
+        //         print("❌ Notification permission denied")
+        //     }
+        //     
+        //     return granted
+        // } catch {
+        //     print("❌ Error requesting notification permission: \(error)")
+        //     return false
+        // }
     }
     
     // MARK: - Configure FCM
     
     func configure() {
-        // Set messaging delegate
-        Messaging.messaging().delegate = self
+        // DISABLED FOR TESTING: Push notifications disabled
+        print("⚠️ Push notifications disabled - FCM configuration skipped")
         
-        // Get current FCM token
-        Task {
-            await getFCMToken()
-        }
+        // Messaging.messaging().delegate = self
+        // Task {
+        //     await getFCMToken()
+        // }
     }
     
     // MARK: - Get FCM Token
     
     func getFCMToken() async {
-        do {
-            let token = try await Messaging.messaging().token()
-            await MainActor.run {
-                self.fcmToken = token
-                print("✅ FCM Token received: \(token)")
-            }
-        } catch {
-            print("❌ Error getting FCM token: \(error)")
-        }
+        // DISABLED FOR TESTING: Push notifications disabled
+        print("⚠️ Push notifications disabled - FCM token request skipped")
+        
+        // do {
+        //     let token = try await Messaging.messaging().token()
+        //     await MainActor.run {
+        //         self.fcmToken = token
+        //         print("✅ FCM Token received: \(token)")
+        //     }
+        // } catch {
+        //     print("❌ Error getting FCM token: \(error)")
+        // }
     }
     
     // MARK: - Save Token to Firestore

@@ -14,6 +14,7 @@ struct VoiceRecorderView: View {
     let onCancel: () -> Void
     
     @State private var waveformAmplitudes: [CGFloat] = Array(repeating: 0.3, count: 20)
+    @State private var waveformTimer: Timer?
     
     var body: some View {
         VStack(spacing: 16) {
@@ -147,6 +148,10 @@ struct VoiceRecorderView: View {
         .onAppear {
             animateWaveform()
         }
+        .onDisappear {
+            waveformTimer?.invalidate()
+            waveformTimer = nil
+        }
     }
     
     // MARK: - Helper Methods
@@ -161,10 +166,14 @@ struct VoiceRecorderView: View {
     }
     
     private func animateWaveform() {
-        let timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak voiceService] currentTimer in
+        // Invalidate any existing timer
+        waveformTimer?.invalidate()
+        
+        // Create new timer - structs can't use weak self
+        waveformTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak voiceService] _ in
             Task { @MainActor [weak voiceService] in
-                guard let voiceService = voiceService, voiceService.isRecording else {
-                    currentTimer.invalidate()
+                guard let voiceService = voiceService,
+                      voiceService.isRecording else {
                     return
                 }
                 
@@ -173,8 +182,11 @@ struct VoiceRecorderView: View {
                 waveformAmplitudes.append(CGFloat.random(in: 0.2...1.0))
             }
         }
+        
         // Keep timer alive
-        RunLoop.main.add(timer, forMode: .common)
+        if let timer = waveformTimer {
+            RunLoop.main.add(timer, forMode: .common)
+        }
     }
 }
 

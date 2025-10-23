@@ -116,12 +116,14 @@ class AuthService: ObservableObject {
     }
     
     private func setupNotifications(userId: String) async {
-        let granted = await NotificationService.shared.requestPermission()
+        // DISABLED FOR TESTING: Push notifications disabled for device testing without APNs
+        print("⚠️ Push notifications disabled - skipping setup")
         
-        if granted {
-            try? await Task.sleep(nanoseconds: 1_000_000_000)
-            await NotificationService.shared.saveTokenToFirestore(userId: userId)
-        }
+        // let granted = await NotificationService.shared.requestPermission()
+        // if granted {
+        //     try? await Task.sleep(nanoseconds: 1_000_000_000)
+        //     await NotificationService.shared.saveTokenToFirestore(userId: userId)
+        // }
     }
     
     private func updateUserStatus(userId: String, status: User.UserStatus) async throws {

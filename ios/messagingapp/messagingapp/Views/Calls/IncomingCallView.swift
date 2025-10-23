@@ -13,6 +13,7 @@ struct IncomingCallView: View {
     @State private var caller: User?
     @State private var isAnswering = false
     @State private var isDeclining = false
+    @State private var ringingAnimation = false
     
     var onAnswer: () -> Void
     var onDecline: () -> Void
@@ -61,6 +62,13 @@ struct IncomingCallView: View {
                         .font(.system(size: 32, weight: .semibold))
                         .foregroundColor(.white)
                     
+                    // Debug: Show caller ID if name not loaded
+                    if caller == nil {
+                        Text("ID: \(call.callerId)")
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.6))
+                    }
+                    
                     // Call type
                     Text(call.type == .video ? "Incoming Video Call" : "Incoming Call")
                         .font(.system(size: 18))
@@ -72,12 +80,12 @@ struct IncomingCallView: View {
                             Circle()
                                 .fill(Color.white.opacity(0.7))
                                 .frame(width: 8, height: 8)
-                                .scaleEffect(isAnswering ? 1.2 : 0.8)
+                                .scaleEffect(ringingAnimation ? 1.2 : 0.8)
                                 .animation(
                                     Animation.easeInOut(duration: 0.6)
                                         .repeatForever()
                                         .delay(Double(index) * 0.2),
-                                    value: isAnswering
+                                    value: ringingAnimation
                                 )
                         }
                     }
@@ -148,19 +156,36 @@ struct IncomingCallView: View {
         .onAppear {
             loadCallerInfo()
             withAnimation(.easeInOut(duration: 0.6).repeatForever()) {
-                isAnswering.toggle()
+                ringingAnimation.toggle()
             }
         }
     }
     
     private func loadCallerInfo() {
+        print("📞 IncomingCallView - Call object: callerId=\(call.callerId), recipientId=\(call.recipientId), type=\(call.type.rawValue)")
+        print("📞 Loading caller info from collection: '\(User.collectionName)' for userId: '\(call.callerId)'")
+        
         let db = Firestore.firestore()
         db.collection(User.collectionName)
             .document(call.callerId)
             .getDocument { snapshot, error in
+                if let error = error {
+                    print("❌ Error loading caller info: \(error.localizedDescription)")
+                    return
+                }
+                
+                guard let snapshot = snapshot, snapshot.exists else {
+                    print("❌ Caller document doesn't exist for ID: \(self.call.callerId)")
+                    return
+                }
+                
                 Task { @MainActor in
-                    if let data = snapshot?.data() {
-                        self.caller = try? Firestore.Decoder().decode(User.self, from: data)
+                    do {
+                        print("✅ Caller data loaded: \(snapshot.data() ?? [:])")
+                        self.caller = try snapshot.data(as: User.self)
+                        print("✅ Caller decoded: \(self.caller?.displayName ?? "nil")")
+                    } catch {
+                        print("❌ Error decoding caller: \(error)")
                     }
                 }
             }

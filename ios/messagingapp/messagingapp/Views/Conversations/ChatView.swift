@@ -9,13 +9,14 @@ import SwiftUI
 
 struct ChatView: View {
     @StateObject private var viewModel: ChatViewModel
-    @StateObject private var callViewModel = CallViewModel()
+    @EnvironmentObject private var callViewModel: CallViewModel
     @EnvironmentObject private var toastManager: ToastManager
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedMessageForThread: Message?
     @State private var shouldScrollToBottom = false
     @State private var showingGroupInfo = false
+    @FocusState private var isInputFocused: Bool
     
     // Phase 4.5: Support for both direct and group conversations
     init(conversation: Conversation) {
@@ -44,12 +45,23 @@ struct ChatView: View {
             // Messages list
             messagesList
             
+            // Typing indicator (positioned above input bar)
+            if let typingText = viewModel.typingText {
+                TypingIndicatorView(text: typingText)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    .animation(.spring(response: 0.3, dampingFraction: 0.7), value: typingText)
+            }
+            
             // Input bar
             MessageInputBar(
                 text: $viewModel.messageText,
                 onSend: {
                     Task {
                         await viewModel.sendMessage()
+                        // Re-focus after sending to keep keyboard open
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                            isInputFocused = true
+                        }
                     }
                 },
                 isSending: viewModel.isSending,
@@ -65,6 +77,10 @@ struct ChatView: View {
                     viewModel.showingVoiceRecorder = true
                 }
             )
+            .focused($isInputFocused)
+            .onChange(of: viewModel.messageText) { oldValue, newValue in
+                viewModel.handleTextChange()
+            }
         }
         .navigationTitle(viewModel.conversationTitle)
         .navigationBarTitleDisplayMode(.inline)
@@ -132,25 +148,8 @@ struct ChatView: View {
                 GroupInfoView(conversation: conversation)
             }
         }
-        .fullScreenCover(isPresented: $callViewModel.showIncomingCall) {
-            if let call = callViewModel.incomingCall {
-                IncomingCallView(
-                    call: call,
-                    onAnswer: {
-                        callViewModel.answerCall()
-                    },
-                    onDecline: {
-                        callViewModel.declineCall()
-                    }
-                )
-            }
-        }
-        .fullScreenCover(isPresented: $callViewModel.showActiveCall) {
-            if let call = callViewModel.currentCall {
-                ActiveCallView(call: call)
-            }
-        }
         .onAppear {
+            viewModel.isChatActive = true
             viewModel.setupRealtimeListeners()
             Task {
                 await viewModel.loadMessages()
@@ -159,8 +158,28 @@ struct ChatView: View {
             toastManager.activeConversationId = viewModel.conversationId
         }
         .onDisappear {
+            viewModel.isChatActive = false
             // Clear active conversation when leaving
             toastManager.activeConversationId = nil
+            
+            // Clear typing status when leaving chat
+            viewModel.clearTypingStatus()
+            viewModel.stopTypingListener()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            // Track when app goes to background/foreground
+            switch newPhase {
+            case .active:
+                viewModel.isChatActive = true
+                Task {
+                    // Mark messages as read when returning to foreground
+                    await viewModel.markAllMessagesAsRead()
+                }
+            case .background, .inactive:
+                viewModel.isChatActive = false
+            @unknown default:
+                break
+            }
         }
         .navigationDestination(item: $selectedMessageForThread) { message in
             if let currentUserId = viewModel.currentUserId {
@@ -354,6 +373,7 @@ struct ChatView: View {
             otherUserName: "Alice"
         )
         .environmentObject(ToastManager())
+        .environmentObject(CallViewModel())
     }
 }
 

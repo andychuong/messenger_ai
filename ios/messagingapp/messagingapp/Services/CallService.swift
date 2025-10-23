@@ -104,18 +104,25 @@ class CallService: ObservableObject {
     
     func startCall(to recipientId: String, isVideo: Bool, completion: @escaping (Error?) -> Void) {
         guard let callerId = currentUserId else {
+            print("❌ Cannot start call: No user ID set")
             completion(NSError(domain: "CallService", code: -1, userInfo: [NSLocalizedDescriptionKey: "No user ID"]))
             return
         }
         
+        print("📞 Starting \(isVideo ? "video" : "audio") call from \(callerId) to \(recipientId)")
+        
+        print("🔧 Setting up WebRTC peer connection...")
         webRTCService.setupPeerConnection(isVideo: isVideo)
         
+        print("📝 Creating offer...")
         webRTCService.createOffer { [weak self] sdp, error in
             guard let self = self, let sdp = sdp else {
+                print("❌ Failed to create offer: \(error?.localizedDescription ?? "unknown")")
                 completion(error)
                 return
             }
             
+            print("✅ Offer created, creating call in Firestore...")
             self.signalingService.createCall(
                 callerId: callerId,
                 recipientId: recipientId,
@@ -124,6 +131,7 @@ class CallService: ObservableObject {
             ) { result in
                 switch result {
                 case .success(let callId):
+                    print("✅ Call created in Firestore with ID: \(callId)")
                     var call = Call(
                         id: callId,
                         callerId: callerId,
@@ -137,9 +145,11 @@ class CallService: ObservableObject {
                         self.isInCall = true
                     }
                     
+                    print("✅ Call started successfully")
                     completion(nil)
                     
                 case .failure(let error):
+                    print("❌ Failed to create call in Firestore: \(error.localizedDescription)")
                     completion(error)
                 }
             }
@@ -148,37 +158,49 @@ class CallService: ObservableObject {
     
     func answerCall(_ call: Call, completion: @escaping (Error?) -> Void) {
         guard let callId = call.id else {
+            print("❌ Answer failed: No call ID")
             completion(NSError(domain: "CallService", code: -1, userInfo: [NSLocalizedDescriptionKey: "No call ID"]))
             return
         }
         
+        print("📞 CallService.answerCall - ID: \(callId), type: \(call.type.rawValue)")
+        
         let isVideo = call.type == .video
+        print("🔧 Setting up peer connection (video: \(isVideo))...")
         webRTCService.setupPeerConnection(isVideo: isVideo)
         
         guard let sdpOffer = call.sdpOffer else {
+            print("❌ Answer failed: No SDP offer in call")
             completion(NSError(domain: "CallService", code: -1, userInfo: [NSLocalizedDescriptionKey: "No SDP offer"]))
             return
         }
         
+        print("📝 Setting remote description (offer)...")
         let offerDescription = RTCSessionDescription(type: .offer, sdp: sdpOffer)
         webRTCService.setRemoteDescription(offerDescription) { [weak self] error in
             guard let self = self else { return }
             
             if let error = error {
+                print("❌ Failed to set remote description: \(error.localizedDescription)")
                 completion(error)
                 return
             }
             
+            print("✅ Remote description set, creating answer...")
             self.webRTCService.createAnswer { sdp, error in
                 guard let sdp = sdp else {
+                    print("❌ Failed to create answer: \(error?.localizedDescription ?? "unknown")")
                     completion(error)
                     return
                 }
                 
+                print("📤 Sending answer SDP to Firestore...")
                 self.signalingService.answerCall(callId: callId, sdpAnswer: sdp.sdp) { error in
                     if let error = error {
+                        print("❌ Failed to send answer: \(error.localizedDescription)")
                         completion(error)
                     } else {
+                        print("✅ Answer sent successfully, updating UI...")
                         DispatchQueue.main.async {
                             self.currentCall = call
                             self.isInCall = true
@@ -212,26 +234,31 @@ class CallService: ObservableObject {
     }
     
     func endCall() {
-        guard let callId = currentCall?.id else {
-            cleanup()
-            return
-        }
+        print("🔚 CallService.endCall - Cleaning up immediately")
         
-        signalingService.endCall(callId: callId) { [weak self] error in
-            if let error = error {
-                print("❌ Error ending call: \(error)")
-            }
-            self?.cleanup()
-        }
-    }
-    
-    private func cleanup() {
-        webRTCService.endCall()
+        // Capture call ID before clearing state
+        let callId = currentCall?.id
         
+        // Clean up UI state immediately
         DispatchQueue.main.async {
             self.currentCall = nil
             self.isInCall = false
             self.incomingCall = nil
+        }
+        
+        // Clean up WebRTC immediately
+        webRTCService.endCall()
+        
+        // Update Firestore in background (don't wait for it)
+        if let callId = callId {
+            print("📤 Updating Firestore call status in background...")
+            signalingService.endCall(callId: callId) { error in
+                if let error = error {
+                    print("❌ Error updating Firestore: \(error)")
+                } else {
+                    print("✅ Firestore call status updated")
+                }
+            }
         }
     }
     

@@ -71,6 +71,10 @@ struct MessageInputBar: View {
                     .onSubmit {
                         if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             onSend()
+                            // Keep keyboard open after sending
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                isTextFieldFocused = true
+                            }
                         }
                     }
                 
@@ -78,7 +82,10 @@ struct MessageInputBar: View {
                 Button {
                     if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         onSend()
-                        isTextFieldFocused = true  // Keep keyboard open
+                        // Keep keyboard open after sending
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            isTextFieldFocused = true
+                        }
                     }
                 } label: {
                     if isSending {

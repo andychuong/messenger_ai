@@ -8,6 +8,7 @@
 import Foundation
 import WebRTC
 import Combine
+import AVFoundation
 
 class WebRTCService: NSObject, ObservableObject {
     // Published properties
@@ -53,6 +54,11 @@ class WebRTCService: NSObject, ObservableObject {
     // MARK: - Setup
     
     func setupPeerConnection(isVideo: Bool) {
+        print("🔧 Setting up peer connection (video: \(isVideo))")
+        
+        // Configure audio session before WebRTC initialization
+        configureAudioSession()
+        
         let config = RTCConfiguration()
         config.iceServers = iceServers
         config.sdpSemantics = .unifiedPlan
@@ -73,6 +79,7 @@ class WebRTCService: NSObject, ObservableObject {
         }
         
         self.peerConnection = pc
+        print("✅ Peer connection created")
         
         // Setup audio track
         setupAudioTrack()
@@ -81,6 +88,51 @@ class WebRTCService: NSObject, ObservableObject {
         if isVideo {
             setupVideoTrack()
         }
+    }
+    
+    private func configureAudioSession() {
+        print("🎵 Configuring audio session...")
+        
+        #if targetEnvironment(simulator)
+        // Simulator has issues with VoIP audio - use simpler config
+        print("📱 Running in simulator - using simplified audio config")
+        let audioSession = AVAudioSession.sharedInstance()
+        do {
+            try audioSession.setCategory(
+                .playAndRecord,
+                mode: .default,
+                options: [.defaultToSpeaker, .mixWithOthers]
+            )
+            try audioSession.setActive(true, options: [])
+            print("✅ Audio session configured (simulator mode)")
+        } catch {
+            print("⚠️ Audio session error (simulator): \(error.localizedDescription)")
+            // In simulator, audio might not work perfectly - that's expected
+        }
+        #else
+        // Real device - full VoIP configuration
+        let audioSession = AVAudioSession.sharedInstance()
+        do {
+            // Configure for VoIP with proper options
+            try audioSession.setCategory(
+                .playAndRecord,
+                mode: .voiceChat,
+                options: [.allowBluetooth, .allowBluetoothA2DP, .mixWithOthers]
+            )
+            
+            // Set preferred sample rate and buffer duration for better performance
+            try audioSession.setPreferredSampleRate(48000)
+            try audioSession.setPreferredIOBufferDuration(0.005)
+            
+            // Activate session
+            try audioSession.setActive(true, options: [])
+            
+            print("✅ Audio session configured successfully")
+        } catch {
+            print("⚠️ Audio session configuration warning: \(error.localizedDescription)")
+            // Don't crash - WebRTC might still work with default settings
+        }
+        #endif
     }
     
     private func setupAudioTrack() {
@@ -153,10 +205,13 @@ class WebRTCService: NSObject, ObservableObject {
     }
     
     func createAnswer(completion: @escaping (RTCSessionDescription?, Error?) -> Void) {
+        // Check if we have a video track to determine video capability
+        let hasVideo = videoTrack != nil
+        
         let constraints = RTCMediaConstraints(
             mandatoryConstraints: [
                 "OfferToReceiveAudio": "true",
-                "OfferToReceiveVideo": isVideoEnabled ? "true" : "false"
+                "OfferToReceiveVideo": hasVideo ? "true" : "false"
             ],
             optionalConstraints: nil
         )
@@ -220,6 +275,8 @@ class WebRTCService: NSObject, ObservableObject {
     // MARK: - Cleanup
     
     func endCall() {
+        print("🔚 Ending WebRTC call")
+        
         // Stop capturing
         #if !targetEnvironment(simulator)
         if let capturer = videoCapturer as? RTCCameraVideoCapturer {
@@ -241,6 +298,19 @@ class WebRTCService: NSObject, ObservableObject {
         isConnected = false
         isVideoEnabled = false
         isMuted = false
+        
+        // Deactivate audio session
+        deactivateAudioSession()
+    }
+    
+    private func deactivateAudioSession() {
+        let audioSession = AVAudioSession.sharedInstance()
+        do {
+            try audioSession.setActive(false, options: [.notifyOthersOnDeactivation])
+            print("✅ Audio session deactivated")
+        } catch {
+            print("⚠️ Could not deactivate audio session: \(error.localizedDescription)")
+        }
     }
     
     deinit {

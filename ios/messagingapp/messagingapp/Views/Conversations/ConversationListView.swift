@@ -10,6 +10,7 @@ import SwiftUI
 struct ConversationListView: View {
     @StateObject private var viewModel = ConversationListViewModel()
     @EnvironmentObject private var toastManager: ToastManager
+    @EnvironmentObject private var callViewModel: CallViewModel
     @State private var showingNewChat = false
     
     var body: some View {
@@ -233,5 +234,7 @@ struct ConversationRow: View {
 
 #Preview {
     ConversationListView()
+        .environmentObject(ToastManager())
+        .environmentObject(CallViewModel())
 }
 

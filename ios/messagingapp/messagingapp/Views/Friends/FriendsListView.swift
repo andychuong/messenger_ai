@@ -10,6 +10,8 @@ import SwiftUI
 struct FriendsListView: View {
     @StateObject private var viewModel = FriendsListViewModel()
     @StateObject private var conversationViewModel = ConversationListViewModel()
+    @EnvironmentObject private var callViewModel: CallViewModel
+    @EnvironmentObject private var toastManager: ToastManager
     @State private var showingAddFriend = false
     @State private var showingFriendRequests = false
     @State private var selectedConversation: Conversation?
@@ -289,5 +291,7 @@ struct FriendRow: View {
 
 #Preview {
     FriendsListView()
+        .environmentObject(CallViewModel())
+        .environmentObject(ToastManager())
 }
 

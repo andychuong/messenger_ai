@@ -16,6 +16,8 @@ struct ActiveCallView: View {
     @State private var timer: Timer?
     @State private var showControls = true
     @State private var controlsTimer: Timer?
+    @State private var callListener: ListenerRegistration?
+    @State private var currentCall: Call?
     
     @Environment(\.dismiss) private var dismiss
     
@@ -49,11 +51,13 @@ struct ActiveCallView: View {
         }
         .onAppear {
             loadOtherUserInfo()
+            startCallListener()
             startCallTimer()
             startControlsTimer()
         }
         .onDisappear {
             stopTimers()
+            callListener?.remove()
         }
         .onTapGesture {
             if call.type == .video {
@@ -73,6 +77,31 @@ struct ActiveCallView: View {
                     .ignoresSafeArea()
             } else {
                 // Placeholder while connecting
+                #if targetEnvironment(simulator)
+                // Simulator placeholder - actual video requires real device
+                ZStack {
+                    LinearGradient(
+                        colors: [Color.purple.opacity(0.3), Color.blue.opacity(0.3)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    VStack(spacing: 16) {
+                        Image(systemName: "video.slash")
+                            .font(.system(size: 60))
+                            .foregroundColor(.white.opacity(0.7))
+                        Text("Video Preview")
+                            .font(.title2)
+                            .foregroundColor(.white)
+                        Text("Simulator Mode")
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.7))
+                        Text("Use a real device to test video")
+                            .font(.caption2)
+                            .foregroundColor(.white.opacity(0.5))
+                    }
+                }
+                .ignoresSafeArea()
+                #else
                 VStack {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
@@ -81,9 +110,11 @@ struct ActiveCallView: View {
                         .foregroundColor(.white)
                         .padding(.top)
                 }
+                #endif
             }
             
             // Local video (picture-in-picture)
+            #if !targetEnvironment(simulator)
             if let localTrack = callService.localVideoTrack {
                 VStack {
                     HStack {
@@ -101,6 +132,7 @@ struct ActiveCallView: View {
                     Spacer()
                 }
             }
+            #endif
         }
     }
     
@@ -138,6 +170,13 @@ struct ActiveCallView: View {
             Text(otherUser?.displayName ?? "Unknown")
                 .font(.system(size: 32, weight: .semibold))
                 .foregroundColor(.white)
+            
+            // Debug: Show user ID if name not loaded
+            if otherUser == nil, let currentUserId = callService.currentUserId {
+                Text("ID: \(call.otherParticipantId(currentUserId: currentUserId))")
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.6))
+            }
             
             // Status
             Text(callStatusText)
@@ -294,24 +333,67 @@ struct ActiveCallView: View {
     }
     
     private func loadOtherUserInfo() {
-        guard let currentUserId = callService.currentUserId else { return }
+        guard let currentUserId = callService.currentUserId else {
+            print("❌ ActiveCallView - No current user ID in call service")
+            return
+        }
         let otherUserId = call.otherParticipantId(currentUserId: currentUserId)
+        print("📞 ActiveCallView - Call object: callerId=\(call.callerId), recipientId=\(call.recipientId), currentUserId=\(currentUserId)")
+        print("📞 ActiveCallView - Other user ID calculated as: '\(otherUserId)'")
+        print("📞 Loading user info from collection: '\(User.collectionName)' for userId: '\(otherUserId)'")
         
         let db = Firestore.firestore()
         db.collection(User.collectionName)
             .document(otherUserId)
             .getDocument { snapshot, error in
+                if let error = error {
+                    print("❌ Error loading user info: \(error.localizedDescription)")
+                    return
+                }
+                
+                guard let snapshot = snapshot, snapshot.exists else {
+                    print("❌ User document doesn't exist for ID: \(otherUserId)")
+                    return
+                }
+                
                 Task { @MainActor in
-                    if let data = snapshot?.data() {
-                        self.otherUser = try? Firestore.Decoder().decode(User.self, from: data)
+                    do {
+                        print("✅ User data loaded: \(snapshot.data() ?? [:])")
+                        self.otherUser = try snapshot.data(as: User.self)
+                        print("✅ User decoded: \(self.otherUser?.displayName ?? "nil")")
+                    } catch {
+                        print("❌ Error decoding user: \(error)")
+                    }
+                }
+            }
+    }
+    
+    private func startCallListener() {
+        guard let callId = call.id else { return }
+        
+        callListener = Firestore.firestore()
+            .collection(Call.collectionName)
+            .document(callId)
+            .addSnapshotListener { snapshot, error in
+                guard let snapshot = snapshot, snapshot.exists else { return }
+                
+                Task { @MainActor in
+                    do {
+                        self.currentCall = try snapshot.data(as: Call.self)
+                    } catch {
+                        print("❌ Error decoding call: \(error)")
                     }
                 }
             }
     }
     
     private func startCallTimer() {
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            callDuration += 1
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [self] _ in
+            if let connectedAt = currentCall?.connectedAt {
+                callDuration = Date().timeIntervalSince(connectedAt)
+            } else {
+                callDuration += 1
+            }
         }
     }
     
