@@ -15,6 +15,7 @@ class MessageToastListener: ObservableObject {
     private var conversationsListener: ListenerRegistration?
     private var messageListeners: [String: ListenerRegistration] = [:]
     private let db = Firestore.firestore()
+    private let encryptionService = EncryptionService.shared
     
     private var lastMessageTimestamps: [String: Date] = [:]
     
@@ -93,24 +94,45 @@ class MessageToastListener: ObservableObject {
                         
                         // Get sender name
                         self.getSenderName(senderId: senderId) { senderName in
-                            // Get message text
-                            let messageText: String
-                            if let text = data["text"] as? String, !text.isEmpty {
-                                messageText = text
-                            } else if data["imageURL"] != nil {
-                                messageText = "📷 Sent a photo"
-                            } else if data["voiceURL"] != nil {
-                                messageText = "🎤 Sent a voice message"
-                            } else {
-                                messageText = "Sent a message"
+                            Task {
+                                // Get message text - decrypt if encrypted
+                                let messageText: String
+                                if let text = data["text"] as? String, !text.isEmpty {
+                                    // Check if message is encrypted
+                                    let isEncrypted = data["isEncrypted"] as? Bool ?? true
+                                    
+                                    if isEncrypted {
+                                        // Try to decrypt
+                                        do {
+                                            let decryptedText = try await self.encryptionService.decryptMessage(
+                                                text,
+                                                conversationId: conversationId
+                                            )
+                                            messageText = decryptedText
+                                        } catch {
+                                            print("⚠️ Failed to decrypt toast message: \(error)")
+                                            messageText = "🔒 Encrypted message"
+                                        }
+                                    } else {
+                                        messageText = text
+                                    }
+                                } else if data["imageURL"] != nil {
+                                    messageText = "📷 Sent a photo"
+                                } else if data["voiceURL"] != nil {
+                                    messageText = "🎤 Sent a voice message"
+                                } else {
+                                    messageText = "Sent a message"
+                                }
+                                
+                                // Show toast on main actor
+                                await MainActor.run {
+                                    toastManager.showToast(
+                                        senderName: senderName,
+                                        message: messageText,
+                                        conversationId: conversationId
+                                    )
+                                }
                             }
-                            
-                            // Show toast
-                            toastManager.showToast(
-                                senderName: senderName,
-                                message: messageText,
-                                conversationId: conversationId
-                            )
                         }
                     }
                 }

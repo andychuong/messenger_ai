@@ -18,7 +18,6 @@ struct ChatView: View {
     @State private var showingGroupInfo = false
     @State private var showingAIAssistant = false
     @State private var previousMessageCount = 0
-    @State private var userHasScrolled = false
     @FocusState private var isInputFocused: Bool
     
     // Phase 4.5: Support for both direct and group conversations
@@ -55,14 +54,12 @@ struct ChatView: View {
                     .animation(.spring(response: 0.3, dampingFraction: 0.7), value: typingText)
             }
             
-            // Input bar
+            // Input bar with encryption toggle
             MessageInputBar(
                 text: $viewModel.messageText,
                 onSend: {
                     Task {
                         await viewModel.sendMessage()
-                        // Reset scroll flag when sending message
-                        userHasScrolled = false
                         // Re-focus after sending to keep keyboard open
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                             isInputFocused = true
@@ -80,6 +77,10 @@ struct ChatView: View {
                 },
                 onVoiceRecord: {
                     viewModel.showingVoiceRecorder = true
+                },
+                nextMessageEncrypted: viewModel.nextMessageEncrypted,
+                onToggleEncryption: {
+                    viewModel.toggleNextMessageEncryption()
                 }
             )
             .focused($isInputFocused)
@@ -174,7 +175,6 @@ struct ChatView: View {
             toastManager.activeConversationId = viewModel.conversationId
             // Initialize message count tracking
             previousMessageCount = viewModel.messages.count
-            userHasScrolled = false
         }
         .onDisappear {
             viewModel.isChatActive = false
@@ -309,15 +309,10 @@ struct ChatView: View {
             }
             .defaultScrollAnchor(.bottom)
             .onChange(of: viewModel.messages.count) { oldCount, newCount in
-                // Only scroll to bottom if:
-                // 1. New message was added (count increased)
-                // 2. AND user hasn't manually scrolled up
+                // Always scroll to bottom when new messages arrive
                 if newCount > previousMessageCount {
-                    // Give a small delay to determine if user is at bottom
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                        if !userHasScrolled {
-                            scrollToBottom(scrollProxy)
-                        }
+                        scrollToBottom(scrollProxy)
                     }
                 }
                 previousMessageCount = newCount

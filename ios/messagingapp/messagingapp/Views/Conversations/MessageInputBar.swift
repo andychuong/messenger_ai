@@ -24,6 +24,10 @@ struct MessageInputBar: View {
     // Voice recording
     var onVoiceRecord: (() -> Void)? = nil
     
+    // Phase 9.5 Redesign: Encryption toggle
+    var nextMessageEncrypted: Bool = true
+    var onToggleEncryption: (() -> Void)? = nil
+    
     @FocusState private var isTextFieldFocused: Bool
     
     var body: some View {
@@ -33,7 +37,19 @@ struct MessageInputBar: View {
                 editModeHeader
             }
             
-            HStack(alignment: .bottom, spacing: 12) {
+            HStack(alignment: .center, spacing: 12) {
+                // Phase 9.5 Redesign: Lock/Unlock toggle (only show when not editing)
+                if !isEditing, let toggleEncryption = onToggleEncryption {
+                    Button {
+                        toggleEncryption()
+                    } label: {
+                        Image(systemName: nextMessageEncrypted ? "lock.fill" : "lock.open.fill")
+                            .font(.title2)
+                            .foregroundColor(nextMessageEncrypted ? .orange : .blue)
+                    }
+                    .disabled(isSending)
+                }
+                
                 // Image picker button (only show when not editing)
                 if !isEditing, let imagePicker = onImagePick {
                     Button {
@@ -46,37 +62,45 @@ struct MessageInputBar: View {
                     .disabled(isSending)
                 }
                 
-                // Voice recorder button (only show when not editing and text is empty)
-                if !isEditing, text.isEmpty, let voiceRecorder = onVoiceRecord {
-                    Button {
-                        voiceRecorder()
-                    } label: {
-                        Image(systemName: "mic")
-                            .font(.title2)
-                            .foregroundColor(.blue)
-                    }
-                    .disabled(isSending)
-                }
-                
-                // Text input
-                TextField(isEditing ? "Edit message" : "Message", text: $text, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color(.systemGray6))
-                    .cornerRadius(20)
-                    .lineLimit(1...5)
-                    .focused($isTextFieldFocused)
-                    .disabled(isSending)
-                    .onSubmit {
-                        if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            onSend()
-                            // Keep keyboard open after sending
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                isTextFieldFocused = true
+                // Phase 9.5 Redesign: Text input with microphone button inside (iOS Messenger style)
+                HStack(spacing: 8) {
+                    // Text input with encryption-aware placeholder
+                    TextField(
+                        isEditing ? "Edit message" : (nextMessageEncrypted ? "Encrypted message" : "AI-enhanced message"),
+                        text: $text,
+                        axis: .vertical
+                    )
+                        .textFieldStyle(.plain)
+                        .padding(.leading, 12)
+                        .padding(.vertical, 8)
+                        .lineLimit(1...5)
+                        .focused($isTextFieldFocused)
+                        .disabled(isSending)
+                        .onSubmit {
+                            if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                onSend()
+                                // Keep keyboard open after sending
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                    isTextFieldFocused = true
+                                }
                             }
                         }
+                    
+                    // Microphone button inside text field (only when empty and not editing)
+                    if !isEditing, text.isEmpty, let voiceRecorder = onVoiceRecord {
+                        Button {
+                            voiceRecorder()
+                        } label: {
+                            Image(systemName: "mic.fill")
+                                .font(.title3)
+                                .foregroundColor(.blue)
+                        }
+                        .disabled(isSending)
+                        .padding(.trailing, 8)
                     }
+                }
+                .background(Color(.systemGray6))
+                .cornerRadius(20)
                 
                 // Send/Update button
                 Button {

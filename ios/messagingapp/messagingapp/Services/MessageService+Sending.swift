@@ -13,12 +13,13 @@ extension MessageService {
     // MARK: - Send Text Message
     
     /// Send a text message
-    func sendMessage(conversationId: String, text: String) async throws -> Message {
+    /// Phase 9.5 Redesign: Per-message encryption control
+    func sendMessage(conversationId: String, text: String, shouldEncrypt: Bool = true) async throws -> Message {
         let currentUserId = try getCurrentUserId()
         let displayName = try await getCurrentUserDisplayName()
         
-        // Encrypt message text
-        let encryptedText = try await encryptionService.encryptMessage(text, conversationId: conversationId)
+        // Encrypt message text if shouldEncrypt is true
+        let encryptedText = shouldEncrypt ? try await encryptionService.encryptMessage(text, conversationId: conversationId) : text
         
         // Create message with encrypted text
         let message = Message.create(
@@ -26,7 +27,7 @@ extension MessageService {
             senderId: currentUserId,
             senderName: displayName,
             text: encryptedText,
-            isEncrypted: true
+            isEncrypted: shouldEncrypt
         )
         
         // Save to Firestore
@@ -37,22 +38,24 @@ extension MessageService {
         let docRef = try await messageRef.addDocument(data: try Firestore.Encoder().encode(message))
         try await docRef.updateData(["status": MessageStatus.sent.rawValue])
         
-        // Save unencrypted text to embeddings collection for AI features
-        do {
-            try await db.collection("embeddings").document(docRef.documentID).setData([
-                "conversationId": conversationId,
-                "messageId": docRef.documentID,
-                "text": text,
-                "senderId": currentUserId,
-                "timestamp": Timestamp(date: message.timestamp),
-                "createdAt": FieldValue.serverTimestamp()
-            ])
-            print("✅ Saved unencrypted text to embeddings for AI access")
-        } catch {
-            print("⚠️  Failed to save embedding: \(error). AI features may not work for this message.")
+        // Phase 9.5 Redesign: Only save embeddings if message is NOT encrypted
+        // When encrypted, we skip AI indexing for privacy
+        if !shouldEncrypt {
+            do {
+                try await db.collection("embeddings").document(docRef.documentID).setData([
+                    "conversationId": conversationId,
+                    "messageId": docRef.documentID,
+                    "text": text,
+                    "senderId": currentUserId,
+                    "timestamp": Timestamp(date: message.timestamp),
+                    "createdAt": FieldValue.serverTimestamp()
+                ])
+            } catch {
+                print("⚠️  Failed to save embedding: \(error). AI features may not work for this message.")
+            }
         }
         
-        // Create message with ID and decrypted text for local display
+        // Create message with ID and original text for local display
         var sentMessage = message
         sentMessage.id = docRef.documentID
         sentMessage.status = .sent

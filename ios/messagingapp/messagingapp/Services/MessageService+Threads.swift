@@ -21,7 +21,7 @@ extension MessageService {
         let currentUserId = try getCurrentUserId()
         let displayName = try await getCurrentUserDisplayName()
         
-        // Encrypt message text
+        // Phase 9.5 Redesign: Thread replies are always encrypted
         let encryptedText = try await encryptionService.encryptMessage(text, conversationId: conversationId)
         
         // Create thread reply message

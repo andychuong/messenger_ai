@@ -59,8 +59,8 @@ class EncryptionService {
     ///   - conversationId: Conversation ID to retrieve encryption key
     /// - Returns: Decrypted plain text
     func decryptMessage(_ encryptedText: String, conversationId: String) async throws -> String {
-        // Get conversation key
-        let symmetricKey = try await getOrCreateConversationKey(conversationId: conversationId)
+        // Get conversation key (don't create if missing - decryption requires existing key)
+        let symmetricKey = try await getOrCreateConversationKey(conversationId: conversationId, createIfMissing: false)
         
         // Decode from base64
         guard let combined = Data(base64Encoded: encryptedText) else {
@@ -89,7 +89,7 @@ class EncryptionService {
     ///   - conversationId: Conversation ID
     /// - Returns: Encrypted data as base64 string
     func encryptFile(_ data: Data, conversationId: String) async throws -> Data {
-        let symmetricKey = try await getOrCreateConversationKey(conversationId: conversationId)
+        let symmetricKey = try await getOrCreateConversationKey(conversationId: conversationId, createIfMissing: true)
         
         // Encrypt with AES-256-GCM
         let sealedBox = try AES.GCM.seal(data, using: symmetricKey)
@@ -108,7 +108,7 @@ class EncryptionService {
     ///   - conversationId: Conversation ID
     /// - Returns: Decrypted data
     func decryptFile(_ encryptedData: Data, conversationId: String) async throws -> Data {
-        let symmetricKey = try await getOrCreateConversationKey(conversationId: conversationId)
+        let symmetricKey = try await getOrCreateConversationKey(conversationId: conversationId, createIfMissing: false)
         
         // Create sealed box
         let sealedBox = try AES.GCM.SealedBox(combined: encryptedData)
@@ -123,9 +123,12 @@ class EncryptionService {
     
     /// Get or create AES-256 key for conversation (stored in Firestore)
     /// Phase 9: Keys are now tied to user account, not device
-    /// - Parameter conversationId: Conversation ID
+    /// Phase 9.5 Redesign: Keys stored in conversation document for sharing between participants
+    /// - Parameters:
+    ///   - conversationId: Conversation ID
+    ///   - createIfMissing: If true, generates a new key if none exists. If false, throws error.
     /// - Returns: SymmetricKey for AES encryption
-    private func getOrCreateConversationKey(conversationId: String) async throws -> SymmetricKey {
+    private func getOrCreateConversationKey(conversationId: String, createIfMissing: Bool = true) async throws -> SymmetricKey {
         // Check memory cache first
         if let cachedKey = keyCache[conversationId] {
             return cachedKey
@@ -136,7 +139,28 @@ class EncryptionService {
             throw EncryptionError.userNotAuthenticated
         }
         
-        // Try to retrieve from Firestore
+        // Phase 9.5 Fix: Try to retrieve from SHARED conversation location first
+        let sharedKeyDocRef = db.collection("conversations")
+            .document(conversationId)
+            .collection("metadata")
+            .document("encryptionKey")
+        
+        do {
+            let doc = try await sharedKeyDocRef.getDocument()
+            
+            if let data = doc.data(),
+               let keyBase64 = data["key"] as? String,
+               let keyData = Data(base64Encoded: keyBase64) {
+                // Found existing shared key
+                let key = SymmetricKey(data: keyData)
+                keyCache[conversationId] = key  // Cache it
+                return key
+            }
+        } catch {
+            // Key not found in shared location
+        }
+        
+        // Try to retrieve from legacy per-user location
         let keyDocRef = db.collection("users")
             .document(userId)
             .collection("encryptionKeys")
@@ -148,32 +172,44 @@ class EncryptionService {
             if let data = doc.data(),
                let keyBase64 = data["key"] as? String,
                let keyData = Data(base64Encoded: keyBase64) {
-                // Found existing key
+                // Found existing key in per-user location
                 let key = SymmetricKey(data: keyData)
+                
+                // Migrate to shared location
+                try await sharedKeyDocRef.setData([
+                    "key": keyBase64,
+                    "conversationId": conversationId,
+                    "createdAt": FieldValue.serverTimestamp(),
+                    "createdBy": userId
+                ])
+                
                 keyCache[conversationId] = key  // Cache it
-                print("🔐 Retrieved encryption key from Firestore for conversation: \(conversationId)")
                 return key
             }
         } catch {
-            // Key doesn't exist yet, will create below
-            print("🔐 No existing key found, generating new one...")
+            // Key doesn't exist in per-user location either
         }
         
         // MIGRATION: Try to retrieve from Keychain (for backward compatibility)
         if let legacyKeyData = keychainService.retrieveConversationKey(conversationId: conversationId) {
             let legacyKey = SymmetricKey(data: legacyKeyData)
-            
-            // Migrate to Firestore
             let keyBase64 = legacyKeyData.base64EncodedString()
-            try await keyDocRef.setData([
+            
+            // Migrate to SHARED location (not per-user)
+            try await sharedKeyDocRef.setData([
                 "key": keyBase64,
                 "conversationId": conversationId,
-                "createdAt": FieldValue.serverTimestamp()
+                "createdAt": FieldValue.serverTimestamp(),
+                "createdBy": userId
             ])
             
             keyCache[conversationId] = legacyKey  // Cache it
-            print("🔐 Migrated encryption key from Keychain to Firestore for conversation: \(conversationId)")
             return legacyKey
+        }
+        
+        // Phase 9.5 Redesign: Only create new keys when explicitly requested
+        guard createIfMissing else {
+            throw EncryptionError.keyNotFound
         }
         
         // Generate new key
@@ -181,15 +217,15 @@ class EncryptionService {
         let keyData = newKey.withUnsafeBytes { Data($0) }
         let keyBase64 = keyData.base64EncodedString()
         
-        // Save to Firestore
-        try await keyDocRef.setData([
+        // Save to SHARED location (accessible by all participants)
+        try await sharedKeyDocRef.setData([
             "key": keyBase64,
             "conversationId": conversationId,
-            "createdAt": FieldValue.serverTimestamp()
+            "createdAt": FieldValue.serverTimestamp(),
+            "createdBy": userId
         ])
         
         keyCache[conversationId] = newKey  // Cache it
-        print("🔐 Generated new encryption key and saved to Firestore for conversation: \(conversationId)")
         return newKey
     }
     
@@ -203,8 +239,15 @@ class EncryptionService {
         // Remove from cache
         keyCache.removeValue(forKey: conversationId)
         
-        // Delete from Firestore
-        try await db.collection("users")
+        // Delete from shared location
+        try await db.collection("conversations")
+            .document(conversationId)
+            .collection("metadata")
+            .document("encryptionKey")
+            .delete()
+        
+        // Also delete from legacy per-user location (if exists)
+        try? await db.collection("users")
             .document(userId)
             .collection("encryptionKeys")
             .document(conversationId)
@@ -390,6 +433,7 @@ enum EncryptionError: LocalizedError {
     case privateKeyNotFound
     case userNotAuthenticated  // Phase 9: For Firestore key storage
     case firestoreError(String)  // Phase 9: For Firestore operations
+    case keyNotFound  // Phase 9.5 Redesign: Encryption key not found
     
     var errorDescription: String? {
         switch self {
@@ -415,6 +459,8 @@ enum EncryptionError: LocalizedError {
             return "User not authenticated"
         case .firestoreError(let detail):
             return "Firestore error: \(detail)"
+        case .keyNotFound:
+            return "Encryption key not found"
         }
     }
 }

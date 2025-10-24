@@ -35,6 +35,7 @@ struct Message: Identifiable, Codable, Hashable {
     var deliveredTo: [DeliveryReceipt]?
     
     // Encryption flag (Phase 9: AI-sent messages)
+    // Phase 9.5 Redesign: Per-message encryption (true = encrypted/private, false = AI-enhanced)
     var isEncrypted: Bool?  // nil defaults to true for backward compatibility
     
     enum CodingKeys: String, CodingKey {
@@ -86,12 +87,22 @@ enum MediaType: String, Codable {
 
 struct ReadReceipt: Codable, Hashable {
     var userId: String
-    var readAt: Date
+    var timestamp: Date  // Changed from readAt to match Firestore field
+    
+    enum CodingKeys: String, CodingKey {
+        case userId
+        case timestamp
+    }
 }
 
 struct DeliveryReceipt: Codable, Hashable {
     var userId: String
-    var deliveredAt: Date
+    var timestamp: Date  // Changed from deliveredAt to match Firestore field
+    
+    enum CodingKeys: String, CodingKey {
+        case userId
+        case timestamp
+    }
 }
 
 // Extension for Message helpers
@@ -101,13 +112,45 @@ extension Message {
         return senderId == currentUserId
     }
     
+    // Compute actual status based on read receipts
+    // This overrides the stored status for better accuracy
+    func computedStatus(for otherUserId: String? = nil) -> MessageStatus {
+        // If failed, return failed
+        if status == .failed {
+            return .failed
+        }
+        
+        // If we have readBy receipts, check if anyone has read it
+        if let readBy = readBy, !readBy.isEmpty {
+            // If checking for specific user
+            if let otherUserId = otherUserId {
+                let userHasRead = readBy.contains { $0.userId == otherUserId }
+                if userHasRead {
+                    return .read
+                }
+            } else {
+                // Any read receipt means the message is read
+                return .read
+            }
+        }
+        
+        // If we have deliveredTo receipts, message is delivered
+        if let deliveredTo = deliveredTo, !deliveredTo.isEmpty {
+            return .delivered
+        }
+        
+        // Otherwise return the stored status
+        return status
+    }
+    
     // Check if message has been read
     var isRead: Bool {
-        return status == .read
+        return computedStatus() == .read
     }
     
     // Check if message has been delivered
     var isDelivered: Bool {
+        let status = computedStatus()
         return status == .delivered || status == .read
     }
     
@@ -139,8 +182,29 @@ extension Message {
     // Format timestamp for display
     func formattedTime() -> String {
         let formatter = DateFormatter()
-        formatter.timeStyle = .short
-        return formatter.string(from: timestamp)
+        let calendar = Calendar.current
+        
+        if calendar.isDateInToday(timestamp) {
+            // Today: show only time
+            formatter.timeStyle = .short
+            return formatter.string(from: timestamp)
+        } else if calendar.isDateInYesterday(timestamp) {
+            // Yesterday: show "Yesterday" + time
+            formatter.timeStyle = .short
+            return "Yesterday \(formatter.string(from: timestamp))"
+        } else if calendar.isDate(timestamp, equalTo: Date(), toGranularity: .weekOfYear) {
+            // This week: show day name + time
+            formatter.dateFormat = "EEE h:mm a"
+            return formatter.string(from: timestamp)
+        } else if calendar.isDate(timestamp, equalTo: Date(), toGranularity: .year) {
+            // This year: show month/day + time
+            formatter.dateFormat = "MMM d, h:mm a"
+            return formatter.string(from: timestamp)
+        } else {
+            // Older: show full date + time
+            formatter.dateFormat = "MMM d, yyyy h:mm a"
+            return formatter.string(from: timestamp)
+        }
     }
     
     // Check if message can be edited (within 15 minutes)
@@ -157,7 +221,7 @@ extension Message {
         senderId: String,
         senderName: String,
         text: String,
-        isEncrypted: Bool = true
+        isEncrypted: Bool = true  // Phase 9.5 Redesign: Default to encrypted
     ) -> Message {
         return Message(
             id: nil,

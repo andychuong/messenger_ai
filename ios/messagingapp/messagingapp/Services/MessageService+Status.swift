@@ -57,9 +57,17 @@ extension MessageService {
             .getDocuments()
         
         let batch = db.batch()
+        var updateCount = 0
         
         for document in snapshot.documents {
             let data = document.data()
+            let senderId = data["senderId"] as? String ?? ""
+            
+            // Skip messages sent by current user
+            if senderId == currentUserId {
+                continue
+            }
+            
             let readBy = data["readBy"] as? [[String: Any]] ?? []
             
             // Check if user has already read this message
@@ -78,11 +86,43 @@ extension MessageService {
                         ["userId": currentUserId, "timestamp": Timestamp(date: Date())]
                     ])
                 ], forDocument: messageRef)
+                
+                updateCount += 1
             }
         }
         
-        try await batch.commit()
-        print("✅ Marked all messages as read in conversation: \(conversationId)")
+        if updateCount > 0 {
+            do {
+                try await batch.commit()
+            } catch {
+                // If batch fails, try individual updates (slower but more reliable)
+                for document in snapshot.documents {
+                    let data = document.data()
+                    let senderId = data["senderId"] as? String ?? ""
+                    
+                    if senderId == currentUserId {
+                        continue
+                    }
+                    
+                    let readBy = data["readBy"] as? [[String: Any]] ?? []
+                    let alreadyRead = readBy.contains { entry in
+                        entry["userId"] as? String == currentUserId
+                    }
+                    
+                    if !alreadyRead {
+                        try? await db.collection("conversations")
+                            .document(conversationId)
+                            .collection("messages")
+                            .document(document.documentID)
+                            .updateData([
+                                "readBy": FieldValue.arrayUnion([
+                                    ["userId": currentUserId, "timestamp": Timestamp(date: Date())]
+                                ])
+                            ])
+                    }
+                }
+            }
+        }
     }
 }
 

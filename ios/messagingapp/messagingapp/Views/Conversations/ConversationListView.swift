@@ -12,6 +12,7 @@ struct ConversationListView: View {
     @EnvironmentObject private var toastManager: ToastManager
     @EnvironmentObject private var callViewModel: CallViewModel
     @State private var showingNewChat = false
+    @Binding var navigationToConversationId: String?
     
     var body: some View {
         NavigationStack {
@@ -40,6 +41,17 @@ struct ConversationListView: View {
             }
             .sheet(isPresented: $showingNewChat) {
                 NewMessageView()
+            }
+            .navigationDestination(item: $navigationToConversationId) { conversationId in
+                // Find the conversation and navigate to it
+                if let conversation = viewModel.conversations.first(where: { $0.id == conversationId }) {
+                    ChatView(conversation: conversation)
+                        .onAppear {
+                            Task {
+                                await viewModel.markAsRead(conversation)
+                            }
+                        }
+                }
             }
         }
     }
@@ -260,7 +272,7 @@ struct ConversationRow: View {
 }
 
 #Preview {
-    ConversationListView()
+    ConversationListView(navigationToConversationId: .constant(nil))
         .environmentObject(ToastManager())
         .environmentObject(CallViewModel())
 }

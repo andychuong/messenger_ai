@@ -12,15 +12,18 @@ struct MainTabView: View {
     @StateObject private var toastManager = ToastManager()
     @StateObject private var messageListener = MessageToastListener()
     @StateObject private var callViewModel = CallViewModel()
+    @State private var selectedTab = 0
+    @State private var navigationToConversationId: String?
     
     var body: some View {
         ZStack {
-        TabView {
+        TabView(selection: $selectedTab) {
             // Conversations tab
-            ConversationListView()
+            ConversationListView(navigationToConversationId: $navigationToConversationId)
                 .tabItem {
                     Label("Messages", systemImage: "message.fill")
                 }
+                .tag(0)
                 .environmentObject(toastManager)
                 .environmentObject(callViewModel)
             
@@ -29,6 +32,7 @@ struct MainTabView: View {
                 .tabItem {
                     Label("Friends", systemImage: "person.2.fill")
                 }
+                .tag(1)
                 .environmentObject(toastManager)
                 .environmentObject(callViewModel)
             
@@ -37,6 +41,7 @@ struct MainTabView: View {
                 .tabItem {
                     Label("AI", systemImage: "sparkles")
                 }
+                .tag(2)
                 .environmentObject(callViewModel)
             
             // Profile tab
@@ -46,11 +51,13 @@ struct MainTabView: View {
             .tabItem {
                 Label("Profile", systemImage: "person.fill")
             }
+            .tag(3)
             .environmentObject(callViewModel)
         }
         .toastContainer(toastManager: toastManager) { conversationId in
-            // Handle toast tap - navigate to conversation
-            // This will be handled by the ConversationListView
+            // Switch to Messages tab and navigate to conversation
+            selectedTab = 0
+            navigationToConversationId = conversationId
         }
         .onAppear {
             messageListener.startListening(toastManager: toastManager)

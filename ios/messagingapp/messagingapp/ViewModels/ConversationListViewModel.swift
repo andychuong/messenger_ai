@@ -33,6 +33,10 @@ class ConversationListViewModel: ObservableObject {
     
     init() {
         setupRealtimeListener()
+        // Sync unread counts on app launch
+        Task {
+            await syncUnreadCounts()
+        }
     }
     
     deinit {
@@ -138,6 +142,61 @@ class ConversationListViewModel: ObservableObject {
     
     var hasUnreadMessages: Bool {
         return totalUnreadCount > 0
+    }
+    
+    // MARK: - Sync Unread Counts
+    
+    /// Sync unread counts with actual message read receipts
+    /// This fixes the issue where unreadCount persists after app restart even though messages are read
+    private func syncUnreadCounts() async {
+        guard let currentUserId = currentUserId else { return }
+        
+        for conversation in conversations {
+            guard let conversationId = conversation.id else { continue }
+            
+            // Check if this conversation has unread messages according to the stored count
+            let storedUnreadCount = conversation.unreadCountForUser(currentUserId)
+            if storedUnreadCount == 0 {
+                continue // Already marked as read
+            }
+            
+            // Check actual unread messages by querying messages without readBy for current user
+            do {
+                let snapshot = try await Firestore.firestore()
+                    .collection("conversations")
+                    .document(conversationId)
+                    .collection("messages")
+                    .getDocuments()
+                
+                var actualUnreadCount = 0
+                
+                for document in snapshot.documents {
+                    let data = document.data()
+                    let senderId = data["senderId"] as? String ?? ""
+                    
+                    // Skip messages sent by current user
+                    if senderId == currentUserId {
+                        continue
+                    }
+                    
+                    let readBy = data["readBy"] as? [[String: Any]] ?? []
+                    let isRead = readBy.contains { entry in
+                        entry["userId"] as? String == currentUserId
+                    }
+                    
+                    if !isRead {
+                        actualUnreadCount += 1
+                    }
+                }
+                
+                // If actual count is 0 but stored count is > 0, clear it
+                if actualUnreadCount == 0 && storedUnreadCount > 0 {
+                    try await conversationService.markAsRead(conversationId: conversationId)
+                }
+            } catch {
+                // Silently fail
+            }
+        }
     }
 }
 

@@ -486,5 +486,6 @@ class ConversationService: ObservableObject {
         
         return members
     }
+    
 }
 

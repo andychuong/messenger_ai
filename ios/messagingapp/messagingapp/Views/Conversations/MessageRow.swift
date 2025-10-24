@@ -402,6 +402,13 @@ struct MessageRow: View {
     
     private var messageMetadata: some View{
         HStack(spacing: 4) {
+            // Phase 9.5 Redesign: Encryption indicator
+            if let isEncrypted = message.isEncrypted {
+                Image(systemName: isEncrypted ? "lock.fill" : "lock.open.fill")
+                    .font(.system(size: 8))
+                    .foregroundColor(isEncrypted ? .orange : .blue)
+            }
+            
             // Timestamp
             Text(message.formattedTime())
                 .font(.caption2)
@@ -432,7 +439,10 @@ struct MessageRow: View {
     
     private var statusIndicator: some View {
         Group {
-            switch message.status {
+            // Use computed status based on read receipts
+            let currentStatus = message.computedStatus()
+            
+            switch currentStatus {
             case .sending:
                 Image(systemName: "clock")
                     .font(.caption2)

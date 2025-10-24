@@ -20,6 +20,9 @@ class ChatViewModel: ObservableObject {
     @Published var showingVoiceRecorder = false
     @Published var typingText: String? = nil
     
+    // Phase 9.5 Redesign: Per-message encryption toggle
+    @Published var nextMessageEncrypted = true // Default to encrypted
+    
     let voiceService = VoiceRecordingService()
     private var typingIndicator = TypingIndicatorService()
     private var typingCancellable: AnyCancellable?
@@ -93,8 +96,10 @@ class ChatViewModel: ObservableObject {
         messagesListener = messageService.listenToMessages(conversationId: conversationId) { [weak self] messages in
             Task { @MainActor in
                 self?.messages = messages
-                // Don't mark as read here - it causes too many updates
-                // Only mark as read when view appears or app returns to foreground
+                // Mark as read if chat is active and new messages arrived
+                if self?.isChatActive == true {
+                    await self?.markAllMessagesAsRead()
+                }
             }
         }
         
@@ -233,10 +238,15 @@ class ChatViewModel: ObservableObject {
         errorMessage = nil
         
         do {
+            // Phase 9.5 Redesign: Pass per-message encryption flag
             let sentMessage = try await messageService.sendMessage(
                 conversationId: conversationId,
-                text: textToSend
+                text: textToSend,
+                shouldEncrypt: nextMessageEncrypted
             )
+            
+            // Reset to default (encrypted) after sending
+            nextMessageEncrypted = true
             
             if !messages.contains(where: { $0.id == sentMessage.id }) {
                 messages.append(sentMessage)
@@ -251,9 +261,11 @@ class ChatViewModel: ObservableObject {
     }
     
     func markAllMessagesAsRead() async {
-        // Debounce: only mark as read if it's been at least 2 seconds since last call
+        // Debounce: only mark as read if it's been at least 0.5 seconds since last call
         let now = Date()
-        guard now.timeIntervalSince(lastMarkAsReadTime) >= 2.0 else {
+        let timeSinceLastCall = now.timeIntervalSince(lastMarkAsReadTime)
+        
+        guard timeSinceLastCall >= 0.5 else {
             return
         }
         
@@ -263,9 +275,13 @@ class ChatViewModel: ObservableObject {
         lastMarkAsReadTime = now
         
         do {
+            // Mark individual messages as read
             try await messageService.markAllAsRead(conversationId: conversationId)
+            
+            // Also clear the conversation's unread count
+            try await conversationService.markAsRead(conversationId: conversationId)
         } catch {
-            // Only log error if it's not a permission error (to reduce log spam)
+            // Silently fail for permission errors
             if !error.localizedDescription.contains("permissions") {
                 print("Error marking messages as read: \(error)")
             }
@@ -447,5 +463,11 @@ class ChatViewModel: ObservableObject {
         
         isSending = false
     }
+    
+    // MARK: - Phase 9.5 Redesign: Per-Message Encryption Toggle
+    
+    func toggleNextMessageEncryption() {
+        nextMessageEncrypted.toggle()
+        print(nextMessageEncrypted ? "🔒 Next message will be encrypted" : "🔓 Next message will be AI-enhanced")
+    }
 }
-
