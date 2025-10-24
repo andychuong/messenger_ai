@@ -25,7 +25,8 @@ extension MessageService {
             conversationId: conversationId,
             senderId: currentUserId,
             senderName: displayName,
-            text: encryptedText
+            text: encryptedText,
+            isEncrypted: true
         )
         
         // Save to Firestore

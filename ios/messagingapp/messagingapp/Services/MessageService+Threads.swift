@@ -29,7 +29,8 @@ extension MessageService {
             conversationId: conversationId,
             senderId: currentUserId,
             senderName: displayName,
-            text: encryptedText
+            text: encryptedText,
+            isEncrypted: true
         )
         message.replyTo = parentMessageId
         
@@ -116,8 +117,10 @@ extension MessageService {
                     for document in documents {
                         guard var message = try? document.data(as: Message.self) else { continue }
                         
-                        // Decrypt if needed
-                        if message.isEncrypted == true {
+                        let shouldDecrypt = message.isEncrypted ?? true
+                        let messageType = message.type ?? .text
+                        
+                        if shouldDecrypt && messageType == .text {
                             do {
                                 let decryptedText = try await self.encryptionService.decryptMessage(
                                     message.text,
@@ -128,6 +131,10 @@ extension MessageService {
                                 print("⚠️ Failed to decrypt thread reply: \(error)")
                                 message.text = "[Encrypted message - decryption failed]"
                             }
+                        } else if !shouldDecrypt {
+                            print("ℹ️  Thread message \(message.id ?? "unknown") is not encrypted (legacy or system message)")
+                        } else {
+                            print("ℹ️  Skipping decryption for non-text thread message: \(message.id ?? "unknown") of type \(messageType.rawValue)")
                         }
                         
                         replies.append(message)
@@ -167,7 +174,10 @@ extension MessageService {
     private func decryptMessageIfNeeded(_ message: Message, conversationId: String) async throws -> Message {
         var decryptedMessage = message
         
-        if message.isEncrypted == true && message.type == .text {
+        let shouldDecrypt = message.isEncrypted ?? true
+        let messageType = message.type ?? .text
+        
+        if shouldDecrypt && messageType == .text {
             do {
                 let decryptedText = try await encryptionService.decryptMessage(
                     message.text,
@@ -178,6 +188,10 @@ extension MessageService {
                 print("⚠️ Failed to decrypt message: \(error)")
                 decryptedMessage.text = "[Encrypted message - decryption failed]"
             }
+        } else if !shouldDecrypt {
+            print("ℹ️  Thread message \(message.id ?? "unknown") is not encrypted (legacy or system message)")
+        } else {
+            print("ℹ️  Skipping decryption for non-text thread message: \(message.id ?? "unknown") of type \(messageType.rawValue)")
         }
         
         return decryptedMessage

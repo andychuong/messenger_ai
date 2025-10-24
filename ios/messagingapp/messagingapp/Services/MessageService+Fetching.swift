@@ -58,8 +58,10 @@ extension MessageService {
                     for document in documents {
                         guard var message = try? document.data(as: Message.self) else { continue }
                         
-                        // Decrypt if needed
-                        if message.isEncrypted == true {
+                        let messageType = message.type ?? .text
+                        let shouldDecrypt = message.isEncrypted ?? true
+                        
+                        if shouldDecrypt && messageType == .text {
                             do {
                                 let decryptedText = try await self.encryptionService.decryptMessage(
                                     message.text,
@@ -70,6 +72,10 @@ extension MessageService {
                                 print("⚠️ Failed to decrypt message: \(error)")
                                 message.text = "[Encrypted message - decryption failed]"
                             }
+                        } else if !shouldDecrypt {
+                            print("ℹ️  Message \(message.id ?? "unknown") is not encrypted (legacy or system message)")
+                        } else {
+                            print("ℹ️  Skipping decryption for non-text message: \(message.id ?? "unknown") of type \(messageType.rawValue)")
                         }
                         
                         messages.append(message)
@@ -88,13 +94,16 @@ extension MessageService {
     private func decryptMessageIfNeeded(_ message: Message, conversationId: String) async throws -> Message {
         var decryptedMessage = message
         
+        let messageType = message.type ?? .text
         // Skip decryption for non-text messages
-        guard message.type == .text else {
+        guard messageType == .text else {
+            print("ℹ️  Skipping decryption for non-text message: \(message.id ?? "unknown") of type \(messageType.rawValue)")
             return decryptedMessage
         }
         
         // Check if message is encrypted
-        if message.isEncrypted == true {
+        let shouldDecrypt = message.isEncrypted ?? true
+        if shouldDecrypt {
             do {
                 let decryptedText = try await encryptionService.decryptMessage(
                     message.text,

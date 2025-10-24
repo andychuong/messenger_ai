@@ -156,7 +156,8 @@ extension Message {
         conversationId: String,
         senderId: String,
         senderName: String,
-        text: String
+        text: String,
+        isEncrypted: Bool = true
     ) -> Message {
         return Message(
             id: nil,
@@ -176,7 +177,8 @@ extension Message {
             reactions: nil,
             translations: nil,
             readBy: nil,
-            deliveredTo: nil
+            deliveredTo: nil,
+            isEncrypted: isEncrypted
         )
     }
 }
