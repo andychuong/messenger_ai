@@ -1064,7 +1064,40 @@ Implementation:
   - [ ] Maintain state between queries
   - [ ] Reference previous answers
 
-### Phase 10: Push Notifications (Day 26)
+### Phase 9.5: Encryption Toggle (Day 26)
+
+#### 9.5.1 UX & Settings
+- [ ] Add encryption toggle to chat options menu
+- [ ] Add lock/unlock control in message composer
+- [ ] Display persistent conversation mode indicator (banner or status chip)
+- [ ] Warn users that AI features pause when encryption mode is enabled
+
+#### 9.5.2 Conversation State & Key Exchange
+- [ ] Store `encryptionMode` flag in conversation documents and local cache
+- [ ] Confirm all participants support encryption before enabling
+- [ ] Generate or rotate conversation keys when the mode switches
+
+#### 9.5.3 Messaging Pipeline
+- [ ] Branch send pipeline based on encryption mode selection
+- [ ] Encrypt messages, attachments, and transcripts client-side when locked
+- [ ] Persist each user's last mode selection per conversation
+
+#### 9.5.4 Backend & AI Integration
+- [ ] Gate Cloud Functions and AI jobs on `encryptionMode`
+- [ ] Skip embedding/indexing for encrypted conversations
+- [ ] Capture consent logs for AI-enabled conversations
+
+#### 9.5.5 Security & Telemetry
+- [ ] Extend key management services for toggle, revocation, and device sync
+- [ ] Ensure mode toggle events are auditable
+- [ ] Document privacy guarantees for each mode
+
+#### 9.5.6 Testing & Rollout
+- [ ] Add unit/UI coverage for toggling scenarios and mixed-mode history
+- [ ] Validate encrypted mode disables AI features end-to-end
+- [ ] Stage rollout with analytics to monitor adoption and regressions
+
+### Phase 10: Push Notifications (Day 27)
 
 #### 10.1 Push Notification Setup
 - [ ] Configure APNs in Apple Developer account
@@ -1108,7 +1141,7 @@ Implementation:
   - [ ] Mark as read action
   - [ ] Accept/decline call actions
 
-### Phase 11: Offline Support & Sync (Day 27)
+### Phase 11: Offline Support & Sync (Day 28)
 
 #### 11.1 Offline Messaging
 - [ ] Implement message queue
@@ -1144,7 +1177,7 @@ Implementation:
   - [ ] Batch operations
   - [ ] Prioritize active conversations
 
-### Phase 12: Polish & UX Improvements (Days 28-29)
+### Phase 12: Polish & UX Improvements (Days 29-30)
 
 #### 12.1 UI/UX Polish
 - [ ] Design app icon
@@ -1217,7 +1250,7 @@ Implementation:
   - [ ] Efficient sync strategy
   - [ ] Background task management
 
-### Phase 13: Testing (Days 30-31)
+### Phase 13: Testing (Days 31-32)
 
 #### 13.1 Unit Tests
 - [ ] Test ViewModels
@@ -1267,7 +1300,7 @@ Implementation:
 - [ ] Test authentication edge cases
 - [ ] Check for data leaks
 
-### Phase 14: Deployment & Documentation (Days 32-33)
+### Phase 14: Deployment & Documentation (Days 33-34)
 
 #### 14.1 App Store Preparation
 - [ ] Create App Store Connect listing
@@ -1339,7 +1372,7 @@ Implementation:
 | 12 | 2 | Polish & UX |
 | 13 | 2 | Testing |
 | 14 | 2 | Deployment & docs |
-| **Total** | **33 days** | |
+| **Total** | **34 days** | |
 
 *Note: Timeline can be adjusted based on priorities. MVP (Phases 1-4.5) can be completed in 8-12 days and includes full messaging with groups.*
 
