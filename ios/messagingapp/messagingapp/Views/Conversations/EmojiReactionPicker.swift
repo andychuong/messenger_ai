@@ -159,6 +159,10 @@ struct EmojiReactionPicker: View {
     // MARK: - Actions
     
     private func selectEmoji(_ emoji: String) {
+        // Phase 12: Haptic and sound feedback
+        HapticManager.shared.reactionAdded()
+        SoundManager.shared.buttonTap()
+        
         // Add to recent emojis
         var recent = recentEmojis
         recent.removeAll(where: { $0 == emoji })

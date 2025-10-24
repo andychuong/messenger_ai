@@ -175,6 +175,12 @@ struct ProfileView: View {
             // Settings section
             Section("Settings") {
                 NavigationLink {
+                    SettingsView()
+                } label: {
+                    Label("Preferences", systemImage: "gearshape.fill")
+                }
+                
+                NavigationLink {
                     Text("Edit Profile - Coming Soon")
                 } label: {
                     Label("Edit Profile", systemImage: "person.crop.circle")
@@ -187,7 +193,7 @@ struct ProfileView: View {
                 }
                 
                 NavigationLink {
-                    Text("Privacy - Coming Soon")
+                    Text("Privacy & Security - Coming Soon")
                 } label: {
                     Label("Privacy & Security", systemImage: "lock")
                 }

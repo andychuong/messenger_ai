@@ -1,0 +1,179 @@
+//
+//  SettingsView.swift
+//  messagingapp
+//
+//  Phase 12: Polish & UX Improvements
+//  Main settings screen
+//
+
+import SwiftUI
+
+struct SettingsView: View {
+    @StateObject private var settingsService = SettingsService.shared
+    @Environment(\.dismiss) private var dismiss
+    @State private var showResetConfirmation = false
+    
+    var body: some View {
+        List {
+            // Appearance Section
+            appearanceSection
+            
+            // Feedback Section
+            feedbackSection
+            
+            // Animations Section
+            animationsSection
+            
+            // Privacy Section (Future)
+            // privacySection
+            
+            // About Section
+            aboutSection
+            
+            // Reset Section
+            resetSection
+        }
+        .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog("Reset Settings", isPresented: $showResetConfirmation) {
+            Button("Reset to Defaults", role: .destructive) {
+                withAnimation {
+                    settingsService.resetToDefaults()
+                    HapticManager.shared.success()
+                }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Are you sure you want to reset all settings to their default values?")
+        }
+    }
+    
+    // MARK: - Appearance Section
+    
+    private var appearanceSection: some View {
+        Section {
+            Picker("Appearance", selection: $settingsService.settings.appearanceMode) {
+                ForEach(AppearanceMode.allCases, id: \.self) { mode in
+                    Label(mode.rawValue, systemImage: mode.icon)
+                        .tag(mode)
+                }
+            }
+            .onChange(of: settingsService.settings.appearanceMode) { _, _ in
+                HapticManager.shared.selection()
+            }
+        } header: {
+            Text("Appearance")
+        } footer: {
+            Text("Choose how the app looks. System follows your device's appearance setting.")
+        }
+    }
+    
+    // MARK: - Feedback Section
+    
+    private var feedbackSection: some View {
+        Section {
+            Toggle(isOn: $settingsService.settings.hapticsEnabled) {
+                Label("Haptic Feedback", systemImage: "waveform")
+            }
+            .onChange(of: settingsService.settings.hapticsEnabled) { _, newValue in
+                if newValue {
+                    HapticManager.shared.success()
+                }
+            }
+            
+            Toggle(isOn: $settingsService.settings.soundEffectsEnabled) {
+                Label("Sound Effects", systemImage: "speaker.wave.2.fill")
+            }
+            .onChange(of: settingsService.settings.soundEffectsEnabled) { _, newValue in
+                if newValue {
+                    SoundManager.shared.notification()
+                }
+            }
+        } header: {
+            Text("Feedback")
+        } footer: {
+            Text("Control haptic and audio feedback when you interact with the app.")
+        }
+    }
+    
+    // MARK: - Animations Section
+    
+    private var animationsSection: some View {
+        Section {
+            Toggle(isOn: $settingsService.settings.animationsEnabled) {
+                Label("Animations", systemImage: "sparkles")
+            }
+            .onChange(of: settingsService.settings.animationsEnabled) { _, _ in
+                HapticManager.shared.selection()
+            }
+            
+            Toggle(isOn: $settingsService.settings.reduceMotion) {
+                Label("Reduce Motion", systemImage: "figure.walk")
+            }
+            .onChange(of: settingsService.settings.reduceMotion) { _, _ in
+                HapticManager.shared.selection()
+            }
+            
+            if settingsService.systemReduceMotionEnabled {
+                HStack {
+                    Image(systemName: "info.circle")
+                        .foregroundColor(.blue)
+                    Text("System Reduce Motion is enabled")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+        } header: {
+            Text("Animations")
+        } footer: {
+            Text("Control animation behavior. Reduce Motion limits motion effects for better accessibility.")
+        }
+    }
+    
+    // MARK: - About Section
+    
+    private var aboutSection: some View {
+        Section {
+            HStack {
+                Text("Version")
+                Spacer()
+                Text("1.0.0")
+                    .foregroundColor(.secondary)
+            }
+            
+            HStack {
+                Text("Build")
+                Spacer()
+                Text("1")
+                    .foregroundColor(.secondary)
+            }
+        } header: {
+            Text("About")
+        }
+    }
+    
+    // MARK: - Reset Section
+    
+    private var resetSection: some View {
+        Section {
+            Button(role: .destructive) {
+                showResetConfirmation = true
+            } label: {
+                HStack {
+                    Spacer()
+                    Text("Reset All Settings")
+                    Spacer()
+                }
+            }
+        } footer: {
+            Text("Reset all settings to their default values. This cannot be undone.")
+        }
+    }
+}
+
+#Preview {
+    NavigationStack {
+        SettingsView()
+    }
+}
+

@@ -22,6 +22,9 @@ struct messagingappApp: App {
     // Network monitor (shared across app)
     @StateObject private var networkMonitor = NetworkMonitor.shared
     
+    // Settings service (Phase 12: shared across app)
+    @StateObject private var settingsService = SettingsService.shared
+    
     // Initialize Firebase
     init() {
         FirebaseApp.configure()
@@ -73,6 +76,8 @@ struct messagingappApp: App {
                 MainTabView()
                     .environmentObject(authService)
                     .environmentObject(networkMonitor)
+                    .environmentObject(settingsService)
+                    .preferredColorScheme(settingsService.settings.appearanceMode.colorScheme)
                     .onAppear {
                         // Set current user ID for call service
                         if let userId = authService.currentUser?.id {

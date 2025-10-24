@@ -41,6 +41,8 @@ struct MessageInputBar: View {
                 // Phase 9.5 Redesign: Lock/Unlock toggle (only show when not editing)
                 if !isEditing, let toggleEncryption = onToggleEncryption {
                     Button {
+                        HapticManager.shared.toggleChanged() // Phase 12: Haptic feedback
+                        SoundManager.shared.buttonTap() // Phase 12: Sound effect
                         toggleEncryption()
                     } label: {
                         Image(systemName: nextMessageEncrypted ? "lock.fill" : "lock.open.fill")
@@ -53,6 +55,7 @@ struct MessageInputBar: View {
                 // Image picker button (only show when not editing)
                 if !isEditing, let imagePicker = onImagePick {
                     Button {
+                        HapticManager.shared.light() // Phase 12: Haptic feedback
                         imagePicker()
                     } label: {
                         Image(systemName: "photo")
@@ -89,6 +92,7 @@ struct MessageInputBar: View {
                     // Microphone button inside text field (only when empty and not editing)
                     if !isEditing, text.isEmpty, let voiceRecorder = onVoiceRecord {
                         Button {
+                            HapticManager.shared.medium() // Phase 12: Haptic feedback
                             voiceRecorder()
                         } label: {
                             Image(systemName: "mic.fill")
@@ -105,6 +109,8 @@ struct MessageInputBar: View {
                 // Send/Update button
                 Button {
                     if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        HapticManager.shared.messageSent() // Phase 12: Haptic feedback
+                        SoundManager.shared.messageSent() // Phase 12: Sound effect
                         onSend()
                         // Keep keyboard open after sending
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {

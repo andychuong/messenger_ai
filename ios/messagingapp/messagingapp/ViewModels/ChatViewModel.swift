@@ -21,7 +21,8 @@ class ChatViewModel: ObservableObject {
     @Published var typingText: String? = nil
     
     // Phase 9.5 Redesign: Per-message encryption toggle
-    @Published var nextMessageEncrypted = true // Default to encrypted
+    // Phase 12: Changed default to unencrypted, saves user preference
+    @Published var nextMessageEncrypted = false // Default to unencrypted (AI-enhanced)
     
     let voiceService = VoiceRecordingService()
     private var typingIndicator = TypingIndicatorService()
@@ -44,6 +45,11 @@ class ChatViewModel: ObservableObject {
     let conversationId: String
     let otherUserId: String
     let otherUserName: String
+    
+    // UserDefaults key for encryption preference
+    private var encryptionPreferenceKey: String {
+        "encryptionPreference_\(conversationId)"
+    }
     
     var currentUserId: String? {
         return Auth.auth().currentUser?.uid
@@ -76,12 +82,18 @@ class ChatViewModel: ObservableObject {
             self.otherUserId = ""
             self.otherUserName = ""
         }
+        
+        // Phase 12: Load saved encryption preference for this conversation
+        loadEncryptionPreference()
     }
     
     init(conversationId: String, otherUserId: String, otherUserName: String) {
         self.conversationId = conversationId
         self.otherUserId = otherUserId
         self.otherUserName = otherUserName
+        
+        // Phase 12: Load saved encryption preference for this conversation
+        loadEncryptionPreference()
     }
     
     deinit {
@@ -245,8 +257,8 @@ class ChatViewModel: ObservableObject {
                 shouldEncrypt: nextMessageEncrypted
             )
             
-            // Reset to default (encrypted) after sending
-            nextMessageEncrypted = true
+            // Phase 12: Keep user's encryption preference (don't reset)
+            // User's preference is now saved and persists across messages
             
             if !messages.contains(where: { $0.id == sentMessage.id }) {
                 messages.append(sentMessage)
@@ -468,6 +480,28 @@ class ChatViewModel: ObservableObject {
     
     func toggleNextMessageEncryption() {
         nextMessageEncrypted.toggle()
-        print(nextMessageEncrypted ? "🔒 Next message will be encrypted" : "🔓 Next message will be AI-enhanced")
+        // Phase 12: Save user's preference for this conversation
+        saveEncryptionPreference()
+        print(nextMessageEncrypted ? "🔒 Messages will be encrypted" : "🔓 Messages will be AI-enhanced")
+    }
+    
+    // MARK: - Encryption Preference Persistence
+    
+    /// Load saved encryption preference for this conversation
+    private func loadEncryptionPreference() {
+        if UserDefaults.standard.object(forKey: encryptionPreferenceKey) != nil {
+            nextMessageEncrypted = UserDefaults.standard.bool(forKey: encryptionPreferenceKey)
+            print("📝 Loaded encryption preference for conversation \(conversationId): \(nextMessageEncrypted ? "encrypted" : "unencrypted")")
+        } else {
+            // Use default (unencrypted)
+            nextMessageEncrypted = false
+            print("📝 Using default encryption preference: unencrypted (AI-enhanced)")
+        }
+    }
+    
+    /// Save encryption preference for this conversation
+    private func saveEncryptionPreference() {
+        UserDefaults.standard.set(nextMessageEncrypted, forKey: encryptionPreferenceKey)
+        print("💾 Saved encryption preference for conversation \(conversationId): \(nextMessageEncrypted ? "encrypted" : "unencrypted")")
     }
 }

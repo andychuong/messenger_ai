@@ -83,6 +83,10 @@ class CallViewModel: ObservableObject {
     // MARK: - Initiate Call
     
     func startAudioCall(to recipientId: String) {
+        // Phase 12: Haptic and sound feedback
+        HapticManager.shared.callAction()
+        SoundManager.shared.callRinging()
+        
         guard hasPermissions else {
             requestPermissions { [weak self] granted in
                 if granted {
@@ -106,6 +110,10 @@ class CallViewModel: ObservableObject {
     }
     
     func startVideoCall(to recipientId: String) {
+        // Phase 12: Haptic and sound feedback
+        HapticManager.shared.callAction()
+        SoundManager.shared.callRinging()
+        
         guard hasPermissions else {
             requestPermissions { [weak self] granted in
                 if granted {
@@ -131,6 +139,10 @@ class CallViewModel: ObservableObject {
     // MARK: - Answer Call
     
     func answerCall() {
+        // Phase 12: Haptic and sound feedback
+        HapticManager.shared.callAction()
+        SoundManager.shared.callConnected()
+        
         guard let call = incomingCall else {
             print("❌ No incoming call to answer")
             return
@@ -173,6 +185,9 @@ class CallViewModel: ObservableObject {
     // MARK: - Decline Call
     
     func declineCall() {
+        // Phase 12: Haptic feedback
+        HapticManager.shared.callAction()
+        
         guard let call = incomingCall else { return }
         
         print("🚫 Declining call - updating UI immediately")

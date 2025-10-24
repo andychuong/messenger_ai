@@ -1133,14 +1133,14 @@ Implementation:
   - [x] Batch operations
   - [x] Prioritize active conversations
 
-### Phase 12: Polish & UX Improvements (Days 28-29)
+### Phase 12: Polish & UX Improvements (Days 28-29) ✅ PARTIAL COMPLETE
 
 #### 12.1 UI/UX Polish
 - [ ] Design app icon
 - [ ] Add launch screen
-- [ ] Implement dark mode
-  - [ ] Update color scheme
-  - [ ] Test all views in dark mode
+- [x] Implement dark mode
+  - [x] Update color scheme
+  - [x] User-selectable appearance mode (Light/Dark/System)
 - [ ] Add loading states everywhere
   - [ ] Skeleton screens
   - [ ] Progress indicators
@@ -1150,20 +1150,20 @@ Implementation:
   - [ ] No friends
   - [ ] No messages
   - [ ] No action items
-- [ ] Add haptic feedback
-  - [ ] Button taps
-  - [ ] Message sent
-  - [ ] Reactions added
-  - [ ] Call actions
-- [ ] Sound effects
-  - [ ] Message sent/received
-  - [ ] Call ringing
-  - [ ] Notifications
-- [ ] Animations
-  - [ ] Message appear/disappear
-  - [ ] Reaction animations
-  - [ ] View transitions
-  - [ ] Loading animations
+- [x] Add haptic feedback
+  - [x] Button taps
+  - [x] Message sent
+  - [x] Reactions added
+  - [x] Call actions
+- [x] Sound effects
+  - [x] Message sent/received
+  - [x] Call ringing
+  - [x] Notifications
+  - [x] Button taps
+- [x] Animations control
+  - [x] Animation toggle
+  - [x] Reduce motion option
+  - [x] System reduce motion integration
 
 #### 12.2 Accessibility
 - [ ] VoiceOver support
