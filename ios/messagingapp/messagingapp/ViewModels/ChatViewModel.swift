@@ -262,7 +262,7 @@ class ChatViewModel: ObservableObject {
         guard let messageId = message.id else { return }
         
         do {
-            try await messageService.deleteMessage(messageId: messageId, conversationId: conversationId)
+            try await messageService.deleteMessage(conversationId: conversationId, messageId: messageId)
             messages.removeAll { $0.id == messageId }
         } catch {
             errorMessage = "Failed to delete message: \(error.localizedDescription)"
@@ -295,8 +295,8 @@ class ChatViewModel: ObservableObject {
         
         do {
             try await messageService.editMessage(
-                messageId: messageId,
                 conversationId: conversationId,
+                messageId: messageId,
                 newText: newText
             )
         } catch {
@@ -312,8 +312,8 @@ class ChatViewModel: ObservableObject {
         
         do {
             try await messageService.editMessage(
-                messageId: messageId,
                 conversationId: conversationId,
+                messageId: messageId,
                 newText: newText
             )
         } catch {
@@ -327,8 +327,8 @@ class ChatViewModel: ObservableObject {
         
         do {
             try await messageService.addReaction(
-                messageId: messageId,
                 conversationId: conversationId,
+                messageId: messageId,
                 emoji: emoji
             )
         } catch {
@@ -336,13 +336,15 @@ class ChatViewModel: ObservableObject {
         }
     }
     
-    func removeReaction(from message: Message) async {
+    func removeReaction(from message: Message, emoji: String) async {
         guard let messageId = message.id else { return }
         
         do {
-            try await messageService.removeReaction(
+            // addReaction toggles reactions, so it handles both add and remove
+            try await messageService.addReaction(
+                conversationId: conversationId,
                 messageId: messageId,
-                conversationId: conversationId
+                emoji: emoji
             )
         } catch {
             print("Error removing reaction: \(error)")
