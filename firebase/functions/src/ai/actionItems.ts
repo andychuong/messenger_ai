@@ -1,12 +1,7 @@
 /**
- * Conversation Intelligence Functions
+ * Action Items Extraction
  * 
- * Handles:
- * - Action item extraction
- * - Decision tracking
- * - Priority message detection
- * 
- * Uses GPT-4o with function calling for structured data extraction
+ * Handles extraction and management of action items from messages
  */
 
 import * as functions from "firebase-functions";
@@ -19,7 +14,6 @@ const openai = new OpenAI({
 
 /**
  * Extract action items from a message
- * Can be triggered automatically or manually
  */
 export const extractActionItems = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
@@ -27,11 +21,8 @@ export const extractActionItems = functions.https.onCall(async (data, context) =
   }
   
   const { messageText, messageId, conversationId, senderId } = data;
-  // userId available for future permission checks
-  // const userId = context.auth.uid;
   
   try {
-    // Use GPT-4o to extract action items
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
@@ -126,7 +117,6 @@ Return an array of action items. If none found, return an empty array.`,
     }
 
     await batch.commit();
-
     console.log(`Extracted ${actionItems.length} action items from message ${messageId}`);
 
     return {
@@ -257,217 +247,6 @@ Focus on concrete tasks, to-dos, and commitments made.`,
 });
 
 /**
- * Detect and track decisions made in conversations
- */
-export const detectDecision = functions.https.onCall(async (data, context) => {
-  if (!context.auth) {
-    throw new functions.https.HttpsError("unauthenticated", "Authentication required");
-  }
-  
-  const { messageText, messageId, conversationId, senderId } = data;
-  
-  try {
-    // Use GPT-4o to detect decisions
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "system",
-          content: `You are an expert at identifying decisions in conversations.
-Analyze the message and determine if a decision was made.
-A decision is:
-- A firm choice between alternatives
-- A commitment to a course of action
-- An agreement or resolution
-
-Extract:
-- The decision made
-- The rationale or reasoning (if provided)
-- The outcome or next steps
-
-Return null if no clear decision is present.`,
-        },
-        {
-          role: "user",
-          content: `Analyze this message for decisions:\n\n${messageText}`,
-        },
-      ],
-      functions: [
-        {
-          name: "detect_decision",
-          description: "Detect if a decision was made in the message",
-          parameters: {
-            type: "object",
-            properties: {
-              hasDecision: {
-                type: "boolean",
-                description: "Whether a decision was made",
-              },
-              decision: {
-                type: "string",
-                description: "The decision that was made",
-              },
-              rationale: {
-                type: "string",
-                description: "The reasoning behind the decision",
-              },
-              outcome: {
-                type: "string",
-                description: "Expected outcome or next steps",
-              },
-            },
-            required: ["hasDecision"],
-          },
-        },
-      ],
-      function_call: { name: "detect_decision" },
-      temperature: 0.3,
-    });
-
-    const functionCall = completion.choices[0]?.message?.function_call;
-    if (!functionCall || !functionCall.arguments) {
-      return { hasDecision: false };
-    }
-
-    const result = JSON.parse(functionCall.arguments);
-
-    if (!result.hasDecision) {
-      return { hasDecision: false };
-    }
-
-    // Store decision in Firestore
-    const decisionRef = admin.firestore().collection("decisions").doc();
-    
-    const decisionData = {
-      decision: result.decision,
-      rationale: result.rationale || null,
-      outcome: result.outcome || null,
-      conversationId,
-      messageId,
-      decidedBy: senderId,
-      detectedAt: admin.firestore.FieldValue.serverTimestamp(),
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    };
-
-    await decisionRef.set(decisionData);
-
-    console.log(`Detected decision in message ${messageId}`);
-
-    return {
-      hasDecision: true,
-      decision: { id: decisionRef.id, ...decisionData },
-    };
-  } catch (error) {
-    console.error("Detect decision error:", error);
-    throw new functions.https.HttpsError("internal", "Failed to detect decision");
-  }
-});
-
-/**
- * Classify message priority
- * Detects urgent messages, mentions, questions, etc.
- */
-export const classifyPriority = functions.https.onCall(async (data, context) => {
-  if (!context.auth) {
-    throw new functions.https.HttpsError("unauthenticated", "Authentication required");
-  }
-  
-  const { messageText, messageId, conversationId, mentions } = data;
-  const userId = context.auth.uid;
-  
-  try {
-    // Use GPT-4o to classify priority
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "system",
-          content: `You are an expert at classifying message priority.
-Analyze the message and determine its priority level based on:
-- Urgency indicators (ASAP, urgent, immediately, deadline)
-- Questions requiring response
-- Mentions or direct requests
-- Emotional tone
-- Time sensitivity
-
-Priority levels:
-- high: Urgent, requires immediate attention
-- medium: Important but not urgent
-- low: Informational, no action needed`,
-        },
-        {
-          role: "user",
-          content: `Classify priority for this message:\n\n${messageText}`,
-        },
-      ],
-      functions: [
-        {
-          name: "classify_priority",
-          description: "Classify message priority",
-          parameters: {
-            type: "object",
-            properties: {
-              priority: {
-                type: "string",
-                enum: ["low", "medium", "high"],
-                description: "Priority level",
-              },
-              reason: {
-                type: "string",
-                description: "Reason for the priority classification",
-              },
-              requiresResponse: {
-                type: "boolean",
-                description: "Whether the message requires a response",
-              },
-            },
-            required: ["priority", "reason"],
-          },
-        },
-      ],
-      function_call: { name: "classify_priority" },
-      temperature: 0.3,
-    });
-
-    const functionCall = completion.choices[0]?.message?.function_call;
-    if (!functionCall || !functionCall.arguments) {
-      return { priority: "medium", reason: "Unable to classify" };
-    }
-
-    const result = JSON.parse(functionCall.arguments);
-
-    // Boost priority if user is mentioned
-    let finalPriority = result.priority;
-    if (mentions && mentions.includes(userId)) {
-      finalPriority = "high";
-      result.reason = "You were mentioned - " + result.reason;
-    }
-
-    // Update message metadata with priority
-    await admin.firestore()
-      .collection("conversations")
-      .doc(conversationId)
-      .collection("messages")
-      .doc(messageId)
-      .update({
-        priority: finalPriority,
-        priorityReason: result.reason,
-        requiresResponse: result.requiresResponse || false,
-        priorityUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-
-    return {
-      priority: finalPriority,
-      reason: result.reason,
-      requiresResponse: result.requiresResponse,
-    };
-  } catch (error) {
-    console.error("Classify priority error:", error);
-    throw new functions.https.HttpsError("internal", "Failed to classify priority");
-  }
-});
-
-/**
  * Update action item status
  */
 export const updateActionItemStatus = functions.https.onCall(async (data, context) => {
@@ -528,39 +307,6 @@ export const getUserActionItems = functions.https.onCall(async (data, context) =
   } catch (error) {
     console.error("Get action items error:", error);
     throw new functions.https.HttpsError("internal", "Failed to get action items");
-  }
-});
-
-/**
- * Get conversation decisions
- */
-export const getConversationDecisions = functions.https.onCall(async (data, context) => {
-  if (!context.auth) {
-    throw new functions.https.HttpsError("unauthenticated", "Authentication required");
-  }
-  
-  const { conversationId, limit = 20 } = data;
-  
-  try {
-    const decisionsSnap = await admin.firestore()
-      .collection("decisions")
-      .where("conversationId", "==", conversationId)
-      .orderBy("createdAt", "desc")
-      .limit(limit)
-      .get();
-
-    const decisions = decisionsSnap.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
-
-    return {
-      decisions,
-      count: decisions.length,
-    };
-  } catch (error) {
-    console.error("Get decisions error:", error);
-    throw new functions.https.HttpsError("internal", "Failed to get decisions");
   }
 });
 

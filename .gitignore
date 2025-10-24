@@ -61,4 +61,7 @@ yarn-error.log*
 test-notification.json
 test-group-notification.json
 
+# Documentation Archive
+docs/archive/
+
 
