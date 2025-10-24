@@ -16,6 +16,7 @@ struct ChatView: View {
     @State private var selectedMessageForThread: Message?
     @State private var shouldScrollToBottom = false
     @State private var showingGroupInfo = false
+    @State private var showingAIAssistant = false
     @FocusState private var isInputFocused: Bool
     
     // Phase 4.5: Support for both direct and group conversations
@@ -115,6 +116,14 @@ struct ChatView: View {
             
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack(spacing: 16) {
+                    // AI Assistant button
+                    Button {
+                        showingAIAssistant = true
+                    } label: {
+                        Image(systemName: "sparkles")
+                            .foregroundColor(.purple)
+                    }
+                    
                     // Group info button for groups
                     if viewModel.isGroupChat {
                         Button {
@@ -147,6 +156,9 @@ struct ChatView: View {
             if let conversation = viewModel.conversation {
                 GroupInfoView(conversation: conversation)
             }
+        }
+        .sheet(isPresented: $showingAIAssistant) {
+            ConversationAIAssistantView(conversationId: viewModel.conversationId)
         }
         .onAppear {
             viewModel.isChatActive = true

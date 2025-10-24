@@ -33,13 +33,11 @@ struct MainTabView: View {
                 .environmentObject(callViewModel)
             
             // AI Assistant tab
-            NavigationStack {
-                AIPlaceholderView()
-            }
-            .tabItem {
-                Label("AI", systemImage: "sparkles")
-            }
-            .environmentObject(callViewModel)
+            AIAssistantView()
+                .tabItem {
+                    Label("AI", systemImage: "sparkles")
+                }
+                .environmentObject(callViewModel)
             
             // Profile tab
             NavigationStack {
@@ -124,23 +122,7 @@ struct FriendsPlaceholderView: View {
     }
 }
 
-struct AIPlaceholderView: View {
-    var body: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "sparkles")
-                .font(.system(size: 80))
-                .foregroundStyle(.purple)
-            
-            Text("AI Assistant")
-                .font(.title)
-                .fontWeight(.bold)
-            
-            Text("Ask questions about your conversations")
-                .foregroundStyle(.secondary)
-        }
-        .navigationTitle("AI Assistant")
-    }
-}
+// AI Placeholder removed - now using AIAssistantView
 
 struct ProfileView: View {
     @EnvironmentObject var authService: AuthService

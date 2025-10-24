@@ -12,11 +12,11 @@ struct Message: Identifiable, Codable, Hashable {
     @DocumentID var id: String?
     var conversationId: String
     var senderId: String
-    var senderName: String
+    var senderName: String?  // Phase 9: Optional for backward compatibility
     var text: String
     var timestamp: Date
     var status: MessageStatus
-    var type: MessageType
+    var type: MessageType?  // Phase 9: Optional for backward compatibility (defaults to .text)
     
     // Optional fields for rich messaging (Phase 4)
     var mediaURL: String?
@@ -33,6 +33,9 @@ struct Message: Identifiable, Codable, Hashable {
     // Read receipts
     var readBy: [ReadReceipt]?
     var deliveredTo: [DeliveryReceipt]?
+    
+    // Encryption flag (Phase 9: AI-sent messages)
+    var isEncrypted: Bool?  // nil defaults to true for backward compatibility
     
     enum CodingKeys: String, CodingKey {
         case id
@@ -55,6 +58,7 @@ struct Message: Identifiable, Codable, Hashable {
         case translations
         case readBy
         case deliveredTo
+        case isEncrypted
     }
 }
 

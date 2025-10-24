@@ -26,6 +26,10 @@ struct MessageRow: View {
         message.type == .system
     }
     
+    private var messageType: MessageType {
+        message.type ?? .text  // Default to .text for backward compatibility
+    }
+    
     private var translationErrorMessage: String {
         translationViewModel.translationError ?? "An error occurred"
     }
@@ -177,7 +181,7 @@ struct MessageRow: View {
     private var messageBubble: some View {
         VStack(alignment: isSentByMe ? .trailing : .leading, spacing: 4) {
             if isGroupChat || !isSentByMe {
-                Text(message.senderName)
+                Text(message.senderName ?? "Unknown")
                     .font(.caption)
                     .fontWeight(.semibold)
                     .foregroundColor(isSentByMe ? .blue : .gray)
@@ -185,11 +189,11 @@ struct MessageRow: View {
             }
             
             // Image message
-            if message.type == .image, let mediaURL = message.mediaURL {
+            if messageType == .image, let mediaURL = message.mediaURL {
                 imageMessageView(url: mediaURL, caption: message.text)
             }
             // Voice message
-            else if message.type == .voice, let mediaURL = message.mediaURL {
+            else if messageType == .voice, let mediaURL = message.mediaURL {
                 voiceMessageView(url: mediaURL, duration: message.voiceDuration ?? 0)
             }
             // Text message
@@ -497,7 +501,7 @@ struct MessageRow: View {
             }
             
             // Translate (only for text messages with valid IDs)
-            if !message.text.isEmpty && message.type != .system && message.id != nil {
+            if !message.text.isEmpty && messageType != .system && message.id != nil {
                 Button {
                     showingTranslationMenu = true
                 } label: {

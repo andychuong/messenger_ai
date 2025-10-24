@@ -40,6 +40,13 @@ service cloud.firestore {
       
       // Cannot delete user documents (handle via Cloud Function)
       allow delete: if false;
+      
+      // Phase 9: Encryption keys subcollection (account-level encryption)
+      // Stores conversation encryption keys tied to user account
+      match /encryptionKeys/{keyId} {
+        // Users can only access their own encryption keys
+        allow read, write: if isOwner(userId);
+      }
     }
     
     // Friendships collection
@@ -188,37 +195,53 @@ service cloud.firestore {
     
     // Action Items collection
     match /actionItems/{itemId} {
-      // Can read if you're the assignee or creator
+      // Can read if you're the assignee, creator, or if it's in your conversation
       allow read: if isSignedIn() && 
-        (request.auth.uid == resource.data.assignedTo || 
-         request.auth.uid == resource.data.createdBy);
+        (request.auth.uid == resource.data.get('assignedTo', null) || 
+         request.auth.uid == resource.data.createdBy ||
+         request.auth.uid in get(/databases/$(database)/documents/conversations/$(resource.data.conversationId)).data.participants);
       
-      // Created by Cloud Functions
+      // Created by Cloud Functions only
       allow create: if false;
       
-      // Can update if you're the assignee (to mark complete)
+      // Can update if you're the assignee or creator (to mark complete or reassign)
       allow update: if isSignedIn() && 
-        request.auth.uid == resource.data.assignedTo;
+        (request.auth.uid == resource.data.get('assignedTo', null) ||
+         request.auth.uid == resource.data.createdBy);
       
       allow delete: if isOwner(resource.data.createdBy);
     }
     
     // Decisions collection
     match /decisions/{decisionId} {
-      // Can read if you're a participant
+      // Can read if you're a participant in the conversation
       allow read: if isSignedIn() && 
-        request.auth.uid in resource.data.participants;
+        request.auth.uid in get(/databases/$(database)/documents/conversations/$(resource.data.conversationId)).data.participants;
       
-      // Created by Cloud Functions
+      // Created by Cloud Functions only
       allow create: if false;
       
       allow update, delete: if false;
     }
     
-    // Embeddings collection (for RAG)
+    // Embeddings collection (for AI features)
+    // Phase 9: Allow users to write unencrypted message text for AI assistant
     match /embeddings/{embeddingId} {
-      // Only Cloud Functions can read/write embeddings
-      allow read, write: if false;
+      // Users can write embeddings for their own messages (for AI features)
+      // Embedding ID matches message ID, and senderId must match authenticated user
+      allow create: if isSignedIn() && 
+        request.resource.data.senderId == request.auth.uid &&
+        request.resource.data.messageId is string &&
+        request.resource.data.conversationId is string &&
+        request.resource.data.text is string &&
+        request.resource.data.timestamp is timestamp;
+      
+      // Cloud Functions can read embeddings for AI processing
+      // Users cannot read embeddings directly (privacy)
+      allow read: if false;
+      
+      // No updates or deletes allowed
+      allow update, delete: if false;
     }
     
     // Default deny all other collections

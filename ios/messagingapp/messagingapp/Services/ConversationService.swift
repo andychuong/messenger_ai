@@ -128,7 +128,7 @@ class ConversationService: ObservableObject {
             senderId: message.senderId,
             senderName: message.senderName,
             timestamp: message.timestamp,
-            type: message.type
+            type: message.type ?? .text  // Default to .text for backward compatibility
         )
         
         // Get current conversation to preserve unread counts

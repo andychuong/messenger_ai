@@ -32,10 +32,10 @@ class MessageService: ObservableObject {
         }
         
         // Encrypt message text
-        let encryptedText = try encryptionService.encryptMessage(text, conversationId: conversationId)
+        let encryptedText = try await encryptionService.encryptMessage(text, conversationId: conversationId)
         
         // Create message with encrypted text
-        var message = Message.create(
+        let message = Message.create(
             conversationId: conversationId,
             senderId: currentUser.uid,
             senderName: displayName,
@@ -51,6 +51,23 @@ class MessageService: ObservableObject {
         
         // Update message status to sent
         try await docRef.updateData(["status": MessageStatus.sent.rawValue])
+        
+        // IMPORTANT: Also save unencrypted text to embeddings collection for AI features
+        // This allows AI assistant to access message content without compromising E2E encryption
+        do {
+            try await db.collection("embeddings").document(docRef.documentID).setData([
+                "conversationId": conversationId,
+                "messageId": docRef.documentID,
+                "text": text,  // Store UNENCRYPTED text for AI processing
+                "senderId": currentUser.uid,
+                "timestamp": Timestamp(date: message.timestamp),
+                "createdAt": FieldValue.serverTimestamp()
+            ])
+            print("✅ Saved unencrypted text to embeddings for AI access")
+        } catch {
+            print("⚠️  Failed to save embedding: \(error). AI features may not work for this message.")
+            // Don't fail the whole message send if embedding fails
+        }
         
         // Create message with ID and decrypted text for local display
         var sentMessage = message
@@ -176,11 +193,13 @@ class MessageService: ObservableObject {
         
         let snapshot = try await query.getDocuments()
         
-        let messages = try snapshot.documents.compactMap { document -> Message? in
-            guard let message = try? document.data(as: Message.self) else { return nil }
+        var messages: [Message] = []
+        for document in snapshot.documents {
+            guard let message = try? document.data(as: Message.self) else { continue }
             
             // Decrypt message using helper that handles both encrypted and legacy plain text
-            return decryptMessage(message, conversationId: conversationId)
+            let decryptedMessage = await decryptMessage(message, conversationId: conversationId)
+            messages.append(decryptedMessage)
         }
         
         return messages.reversed()  // Return in chronological order
@@ -190,23 +209,32 @@ class MessageService: ObservableObject {
     
     /// Decrypt a single message
     /// Handles both encrypted (new) and plain text (legacy) messages
-    private func decryptMessage(_ message: Message, conversationId: String) -> Message {
+    private func decryptMessage(_ message: Message, conversationId: String) async -> Message {
         var decryptedMessage = message
         
+        // Phase 9: Skip decryption for AI-sent messages
+        // isEncrypted == false means message is already plain text (sent by Cloud Function)
+        // nil defaults to true for backward compatibility
+        if message.isEncrypted == false {
+            // AI-sent message - already plain text, no decryption needed
+            return decryptedMessage
+        }
+        
         // Skip decryption for system messages or empty text
-        if message.type != .system && !message.text.isEmpty {
+        let messageType = message.type ?? .text  // Default to .text for backward compatibility
+        if messageType != .system && !message.text.isEmpty {
             // Try to decrypt - if it fails, assume it's a legacy plain text message
-            if let decrypted = try? encryptionService.decryptMessage(message.text, conversationId: conversationId) {
+            if let decrypted = try? await encryptionService.decryptMessage(message.text, conversationId: conversationId) {
                 decryptedMessage.text = decrypted
             } else {
                 // If decryption fails, check if it looks like base64 (encrypted)
-                // Base64 strings are typically longer and contain only alphanumeric + / =
-                let isLikelyEncrypted = message.text.count > 100 && 
-                                       message.text.range(of: "^[A-Za-z0-9+/=]+$", options: .regularExpression) != nil
+                // Base64 strings (including URL-safe variant) contain alphanumeric + / = - _
+                let isLikelyEncrypted = message.text.count > 50 && 
+                                       message.text.range(of: "^[A-Za-z0-9+/=_-]+$", options: .regularExpression) != nil
                 
                 if isLikelyEncrypted {
                     // Looks encrypted but failed to decrypt - show fallback
-                    decryptedMessage.text = "[Encrypted]"
+                    decryptedMessage.text = "[Encrypted - Lost Keys]"
                 } else {
                     // Looks like plain text - use as-is (legacy message)
                     decryptedMessage.text = message.text
@@ -326,7 +354,7 @@ class MessageService: ObservableObject {
         }
         
         // Encrypt new text
-        let encryptedNewText = try encryptionService.encryptMessage(newText, conversationId: conversationId)
+        let encryptedNewText = try await encryptionService.encryptMessage(newText, conversationId: conversationId)
         
         // Update message
         try await messageRef.updateData([
@@ -382,14 +410,17 @@ class MessageService: ObservableObject {
                     return
                 }
                 
-                let messages = documents.compactMap { document -> Message? in
-                    guard let message = try? document.data(as: Message.self) else { return nil }
-                    
-                    // Decrypt using helper that handles both encrypted and legacy plain text
-                    return self.decryptMessage(message, conversationId: conversationId)
+                // Decrypt messages asynchronously
+                Task {
+                    var messages: [Message] = []
+                    for document in documents {
+                        guard let message = try? document.data(as: Message.self) else { continue }
+                        // Decrypt using helper that handles both encrypted and legacy plain text
+                        let decryptedMessage = await self.decryptMessage(message, conversationId: conversationId)
+                        messages.append(decryptedMessage)
+                    }
+                    completion(messages)
                 }
-                
-                completion(messages)
             }
         
         return listener
@@ -433,7 +464,7 @@ class MessageService: ObservableObject {
         }
         
         // Encrypt message text
-        let encryptedText = try encryptionService.encryptMessage(text, conversationId: conversationId)
+        let encryptedText = try await encryptionService.encryptMessage(text, conversationId: conversationId)
         
         // Create message with thread reference and encrypted text
         var message = Message.create(
@@ -476,11 +507,13 @@ class MessageService: ObservableObject {
             .limit(to: limit)
             .getDocuments()
         
-        let messages = try snapshot.documents.compactMap { document -> Message? in
-            guard let message = try? document.data(as: Message.self) else { return nil }
+        var messages: [Message] = []
+        for document in snapshot.documents {
+            guard let message = try? document.data(as: Message.self) else { continue }
             
             // Decrypt using helper that handles both encrypted and legacy plain text
-            return decryptMessage(message, conversationId: conversationId)
+            let decryptedMessage = await decryptMessage(message, conversationId: conversationId)
+            messages.append(decryptedMessage)
         }
         
         return messages
@@ -500,14 +533,17 @@ class MessageService: ObservableObject {
                     return
                 }
                 
-                let messages = documents.compactMap { document -> Message? in
-                    guard let message = try? document.data(as: Message.self) else { return nil }
-                    
-                    // Decrypt using helper that handles both encrypted and legacy plain text
-                    return self.decryptMessage(message, conversationId: conversationId)
+                // Decrypt messages asynchronously
+                Task {
+                    var messages: [Message] = []
+                    for document in documents {
+                        guard let message = try? document.data(as: Message.self) else { continue }
+                        // Decrypt using helper that handles both encrypted and legacy plain text
+                        let decryptedMessage = await self.decryptMessage(message, conversationId: conversationId)
+                        messages.append(decryptedMessage)
+                    }
+                    completion(messages)
                 }
-                
-                completion(messages)
             }
         
         return listener

@@ -3,18 +3,25 @@
 //  messagingapp
 //
 //  Phase 6: Security & Encryption
+//  Phase 9: Account-level encryption (keys stored in Firestore)
 //  End-to-end encryption using AES-256 and RSA
 //
 
 import Foundation
 import CryptoKit
 import Security
+import FirebaseFirestore
+import FirebaseAuth
 
 class EncryptionService {
     
     static let shared = EncryptionService()
     
     private let keychainService = KeychainService.shared
+    private let db = Firestore.firestore()
+    
+    // Cache keys in memory for performance
+    private var keyCache: [String: SymmetricKey] = [:]
     
     private init() {}
     
@@ -25,9 +32,9 @@ class EncryptionService {
     ///   - text: Plain text to encrypt
     ///   - conversationId: Conversation ID to retrieve encryption key
     /// - Returns: Base64 encoded encrypted data with nonce
-    func encryptMessage(_ text: String, conversationId: String) throws -> String {
+    func encryptMessage(_ text: String, conversationId: String) async throws -> String {
         // Get or create conversation key
-        let symmetricKey = try getOrCreateConversationKey(conversationId: conversationId)
+        let symmetricKey = try await getOrCreateConversationKey(conversationId: conversationId)
         
         // Convert text to data
         guard let data = text.data(using: .utf8) else {
@@ -51,9 +58,9 @@ class EncryptionService {
     ///   - encryptedText: Base64 encoded encrypted data
     ///   - conversationId: Conversation ID to retrieve encryption key
     /// - Returns: Decrypted plain text
-    func decryptMessage(_ encryptedText: String, conversationId: String) throws -> String {
+    func decryptMessage(_ encryptedText: String, conversationId: String) async throws -> String {
         // Get conversation key
-        let symmetricKey = try getOrCreateConversationKey(conversationId: conversationId)
+        let symmetricKey = try await getOrCreateConversationKey(conversationId: conversationId)
         
         // Decode from base64
         guard let combined = Data(base64Encoded: encryptedText) else {
@@ -81,8 +88,8 @@ class EncryptionService {
     ///   - data: Data to encrypt
     ///   - conversationId: Conversation ID
     /// - Returns: Encrypted data as base64 string
-    func encryptFile(_ data: Data, conversationId: String) throws -> Data {
-        let symmetricKey = try getOrCreateConversationKey(conversationId: conversationId)
+    func encryptFile(_ data: Data, conversationId: String) async throws -> Data {
+        let symmetricKey = try await getOrCreateConversationKey(conversationId: conversationId)
         
         // Encrypt with AES-256-GCM
         let sealedBox = try AES.GCM.seal(data, using: symmetricKey)
@@ -100,8 +107,8 @@ class EncryptionService {
     ///   - encryptedData: Encrypted data
     ///   - conversationId: Conversation ID
     /// - Returns: Decrypted data
-    func decryptFile(_ encryptedData: Data, conversationId: String) throws -> Data {
-        let symmetricKey = try getOrCreateConversationKey(conversationId: conversationId)
+    func decryptFile(_ encryptedData: Data, conversationId: String) async throws -> Data {
+        let symmetricKey = try await getOrCreateConversationKey(conversationId: conversationId)
         
         // Create sealed box
         let sealedBox = try AES.GCM.SealedBox(combined: encryptedData)
@@ -112,34 +119,104 @@ class EncryptionService {
         return decryptedData
     }
     
-    // MARK: - Conversation Key Management
+    // MARK: - Conversation Key Management (Account-Level)
     
-    /// Get or create AES-256 key for conversation
+    /// Get or create AES-256 key for conversation (stored in Firestore)
+    /// Phase 9: Keys are now tied to user account, not device
     /// - Parameter conversationId: Conversation ID
     /// - Returns: SymmetricKey for AES encryption
-    private func getOrCreateConversationKey(conversationId: String) throws -> SymmetricKey {
-        // Try to retrieve existing key
-        if let keyData = keychainService.retrieveConversationKey(conversationId: conversationId) {
-            return SymmetricKey(data: keyData)
+    private func getOrCreateConversationKey(conversationId: String) async throws -> SymmetricKey {
+        // Check memory cache first
+        if let cachedKey = keyCache[conversationId] {
+            return cachedKey
+        }
+        
+        // Get current user
+        guard let userId = Auth.auth().currentUser?.uid else {
+            throw EncryptionError.userNotAuthenticated
+        }
+        
+        // Try to retrieve from Firestore
+        let keyDocRef = db.collection("users")
+            .document(userId)
+            .collection("encryptionKeys")
+            .document(conversationId)
+        
+        do {
+            let doc = try await keyDocRef.getDocument()
+            
+            if let data = doc.data(),
+               let keyBase64 = data["key"] as? String,
+               let keyData = Data(base64Encoded: keyBase64) {
+                // Found existing key
+                let key = SymmetricKey(data: keyData)
+                keyCache[conversationId] = key  // Cache it
+                print("🔐 Retrieved encryption key from Firestore for conversation: \(conversationId)")
+                return key
+            }
+        } catch {
+            // Key doesn't exist yet, will create below
+            print("🔐 No existing key found, generating new one...")
+        }
+        
+        // MIGRATION: Try to retrieve from Keychain (for backward compatibility)
+        if let legacyKeyData = keychainService.retrieveConversationKey(conversationId: conversationId) {
+            let legacyKey = SymmetricKey(data: legacyKeyData)
+            
+            // Migrate to Firestore
+            let keyBase64 = legacyKeyData.base64EncodedString()
+            try await keyDocRef.setData([
+                "key": keyBase64,
+                "conversationId": conversationId,
+                "createdAt": FieldValue.serverTimestamp()
+            ])
+            
+            keyCache[conversationId] = legacyKey  // Cache it
+            print("🔐 Migrated encryption key from Keychain to Firestore for conversation: \(conversationId)")
+            return legacyKey
         }
         
         // Generate new key
         let newKey = SymmetricKey(size: .bits256)
         let keyData = newKey.withUnsafeBytes { Data($0) }
+        let keyBase64 = keyData.base64EncodedString()
         
-        // Save to keychain
-        guard keychainService.saveConversationKey(keyData, conversationId: conversationId) else {
-            throw EncryptionError.keychainError
-        }
+        // Save to Firestore
+        try await keyDocRef.setData([
+            "key": keyBase64,
+            "conversationId": conversationId,
+            "createdAt": FieldValue.serverTimestamp()
+        ])
         
-        print("🔐 Generated new encryption key for conversation: \(conversationId)")
+        keyCache[conversationId] = newKey  // Cache it
+        print("🔐 Generated new encryption key and saved to Firestore for conversation: \(conversationId)")
         return newKey
     }
     
-    /// Delete conversation encryption key
+    /// Delete conversation encryption key (from Firestore)
     /// - Parameter conversationId: Conversation ID
-    func deleteConversationKey(conversationId: String) {
-        keychainService.deleteConversationKey(conversationId: conversationId)
+    func deleteConversationKey(conversationId: String) async throws {
+        guard let userId = Auth.auth().currentUser?.uid else {
+            throw EncryptionError.userNotAuthenticated
+        }
+        
+        // Remove from cache
+        keyCache.removeValue(forKey: conversationId)
+        
+        // Delete from Firestore
+        try await db.collection("users")
+            .document(userId)
+            .collection("encryptionKeys")
+            .document(conversationId)
+            .delete()
+        
+        print("🔐 Deleted encryption key from Firestore for conversation: \(conversationId)")
+    }
+    
+    /// Clear all cached keys from memory
+    func clearKeyCache() {
+        keyCache.removeAll()
+        print("🔐 Cleared encryption key cache")
     }
     
     // MARK: - RSA Key Pair Generation
@@ -293,7 +370,7 @@ class EncryptionService {
     /// Delete all encryption keys for user (on logout)
     /// - Parameter userId: User ID
     func deleteAllUserKeys(userId: String) {
-        keychainService.deleteUserKeys(userId: userId)
+        _ = keychainService.deleteUserKeys(userId: userId)
         keychainService.deleteAllKeys() // Delete all conversation keys too
         print("🔐 Deleted all encryption keys for user: \(userId)")
     }
@@ -311,6 +388,8 @@ enum EncryptionError: LocalizedError {
     case rsaEncryptionFailed(String)
     case rsaDecryptionFailed(String)
     case privateKeyNotFound
+    case userNotAuthenticated  // Phase 9: For Firestore key storage
+    case firestoreError(String)  // Phase 9: For Firestore operations
     
     var errorDescription: String? {
         switch self {
@@ -332,6 +411,10 @@ enum EncryptionError: LocalizedError {
             return "RSA decryption failed: \(detail)"
         case .privateKeyNotFound:
             return "Private key not found in keychain"
+        case .userNotAuthenticated:
+            return "User not authenticated"
+        case .firestoreError(let detail):
+            return "Firestore error: \(detail)"
         }
     }
 }

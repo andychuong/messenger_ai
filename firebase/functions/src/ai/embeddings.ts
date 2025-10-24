@@ -34,7 +34,20 @@ export const generateMessageEmbedding = functions.firestore
     }
     
     try {
-      // Generate embedding using OpenAI
+      // Check if embedding already exists (created by iOS client with unencrypted text)
+      const existingEmbedding = await admin.firestore()
+        .collection("embeddings")
+        .doc(messageId)
+        .get();
+      
+      if (existingEmbedding.exists) {
+        console.log(`Embedding already exists for message ${messageId}, skipping`);
+        return null;
+      }
+      
+      // Generate embedding using OpenAI (for messages from other clients)
+      // Note: iOS client creates embeddings directly with unencrypted text
+      // This is a fallback for web/other clients
       const response = await openai.embeddings.create({
         model: "text-embedding-3-large",
         input: message.text,
@@ -44,7 +57,6 @@ export const generateMessageEmbedding = functions.firestore
       const embedding = response.data[0].embedding;
       
       // Store embedding in Firestore
-      // Alternative: Store in Pinecone for better performance at scale
       await admin.firestore()
         .collection("embeddings")
         .doc(messageId)
@@ -52,7 +64,7 @@ export const generateMessageEmbedding = functions.firestore
           conversationId,
           messageId,
           embedding,
-          text: message.text,
+          text: message.text,  // May be encrypted if from iOS
           senderId: message.senderId,
           timestamp: message.timestamp,
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -127,6 +139,125 @@ export const semanticSearch = functions.https.onCall(async (data, context) => {
   } catch (error) {
     console.error("Semantic search error:", error);
     throw new functions.https.HttpsError("internal", "Search failed");
+  }
+});
+
+/**
+ * Answer questions using RAG (Retrieval-Augmented Generation)
+ * Combines semantic search with GPT-4o to answer questions about conversations
+ */
+export const answerQuestion = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Authentication required");
+  }
+  
+  const { question, conversationId, limit = 10 } = data;
+  // userId available for future permission checks
+  // const userId = context.auth.uid;
+  
+  try {
+    // Step 1: Perform semantic search to find relevant messages
+    const searchResponse = await openai.embeddings.create({
+      model: "text-embedding-3-large",
+      input: question,
+      dimensions: 1536,
+    });
+    
+    const queryEmbedding = searchResponse.data[0].embedding;
+    
+    // Fetch embeddings from Firestore
+    let embeddingsQuery = admin.firestore()
+      .collection("embeddings")
+      .limit(100); // Fetch more for better context
+    
+    // Filter by conversation if specified
+    if (conversationId) {
+      embeddingsQuery = embeddingsQuery.where("conversationId", "==", conversationId);
+    }
+    
+    const embeddingsSnap = await embeddingsQuery.get();
+    
+    // Calculate similarity and get top results
+    const results = embeddingsSnap.docs.map((doc) => {
+      const data = doc.data();
+      const similarity = cosineSimilarity(queryEmbedding, data.embedding);
+      return {
+        messageId: data.messageId,
+        conversationId: data.conversationId,
+        text: data.text,
+        senderId: data.senderId,
+        similarity,
+        timestamp: data.timestamp,
+      };
+    });
+    
+    const topResults = results
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, limit);
+    
+    if (topResults.length === 0) {
+      return {
+        answer: "I couldn't find any relevant messages to answer your question.",
+        sources: [],
+      };
+    }
+    
+    // Step 2: Fetch user names for context
+    const userIds = [...new Set(topResults.map((r) => r.senderId))];
+    const userNames: Record<string, string> = {};
+    
+    for (const uid of userIds) {
+      const userSnap = await admin.firestore().collection("users").doc(uid).get();
+      userNames[uid] = userSnap.data()?.displayName || "Unknown";
+    }
+    
+    // Step 3: Format context for GPT-4o
+    const contextMessages = topResults.map((result) => ({
+      sender: userNames[result.senderId],
+      text: result.text,
+      timestamp: result.timestamp,
+    }));
+    
+    const contextString = contextMessages
+      .map((msg) => `${msg.sender}: ${msg.text}`)
+      .join("\n\n");
+    
+    // Step 4: Generate answer using GPT-4o with retrieved context
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "system",
+          content: `You are a helpful AI assistant analyzing conversation history. 
+Answer the user's question based ONLY on the provided context from their messages.
+If you cannot answer from the context, say so clearly.
+Be concise, accurate, and cite which person said what when relevant.`,
+        },
+        {
+          role: "user",
+          content: `Context from conversation history:\n\n${contextString}\n\nQuestion: ${question}`,
+        },
+      ],
+      temperature: 0.3,
+      max_tokens: 800,
+    });
+    
+    const answer = completion.choices[0]?.message?.content;
+    
+    return {
+      answer,
+      sources: topResults.map((r) => ({
+        messageId: r.messageId,
+        conversationId: r.conversationId,
+        sender: userNames[r.senderId],
+        text: r.text,
+        similarity: r.similarity,
+      })),
+      contextUsed: topResults.length,
+    };
+  } catch (error) {
+    console.error("Answer question error:", error);
+    throw new functions.https.HttpsError("internal", "Failed to answer question");
   }
 });
 

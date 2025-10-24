@@ -27,6 +27,7 @@ export * from "./ai/translation";
 export * from "./ai/assistant";
 export * from "./ai/embeddings";
 export * from "./ai/voiceToText";
+export * from "./ai/intelligence";
 
 /**
  * Health check function

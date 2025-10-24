@@ -121,6 +121,13 @@ struct ConversationRow: View {
         conversation.unreadCountForUser(currentUserId)
     }
     
+    // Phase 8: Check if conversation has priority messages
+    private var hasPriorityMessages: Bool {
+        // TODO: This could be enhanced to query for high-priority unread messages
+        // For now, we'll add a visual indicator that can be populated from Firestore
+        false
+    }
+    
     var body: some View {
         HStack(spacing: 12) {
             // Profile picture - Phase 4.5: Different icon for groups
@@ -143,6 +150,19 @@ struct ConversationRow: View {
                         }
                     )
                 
+                // Phase 8: Priority indicator (top-left badge)
+                if hasPriorityMessages && unreadCount > 0 {
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 12, height: 12)
+                        .overlay(
+                            Image(systemName: "exclamationmark")
+                                .font(.system(size: 6, weight: .bold))
+                                .foregroundColor(.white)
+                        )
+                        .offset(x: -8, y: -8)
+                }
+                
                 // Online status indicator (only for direct chats)
                 if conversation.type == .direct && otherUser?.status == "online" {
                     Circle()
@@ -162,6 +182,13 @@ struct ConversationRow: View {
                         .font(.headline)
                         .foregroundColor(.primary)
                     
+                    // Phase 8: Priority indicator in title row
+                    if hasPriorityMessages && unreadCount > 0 {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundColor(.red)
+                    }
+                    
                     Spacer()
                     
                     if let lastMessageTime = conversation.lastMessageTime {
@@ -175,7 +202,7 @@ struct ConversationRow: View {
                     // Phase 4.5: Show sender name in group last messages
                     if let lastMessage = conversation.lastMessage {
                         if conversation.type == .group {
-                            Text("\(lastMessage.senderName): \(lastMessage.text)")
+                            Text("\(lastMessage.senderName ?? "Unknown"): \(lastMessage.text)")
                                 .font(.subheadline)
                                 .foregroundColor(.gray)
                                 .lineLimit(2)

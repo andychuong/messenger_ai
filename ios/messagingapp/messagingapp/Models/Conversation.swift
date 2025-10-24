@@ -57,9 +57,9 @@ struct ParticipantDetail: Codable, Hashable {
 struct LastMessage: Codable, Hashable {
     var text: String
     var senderId: String
-    var senderName: String
+    var senderName: String?  // Phase 9: Optional for backward compatibility
     var timestamp: Date
-    var type: MessageType
+    var type: MessageType?  // Phase 9: Optional for backward compatibility (defaults to .text)
     
     enum CodingKeys: String, CodingKey {
         case text

@@ -47,7 +47,7 @@ class AuthService: ObservableObject {
         let publicKeyData = try encryptionService.generateRSAKeyPair(userId: result.user.uid)
         let publicKeyBase64 = publicKeyData.base64EncodedString()
         
-        var user = User(id: result.user.uid, email: email, displayName: displayName)
+        let user = User(id: result.user.uid, email: email, displayName: displayName)
         var userDict = user.toDictionary()
         userDict["publicKey"] = publicKeyBase64  // Store public key for key exchange
         

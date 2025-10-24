@@ -94,7 +94,7 @@ class ImageService {
         }
         
         // Encrypt image data before upload
-        let encryptedData = try encryptionService.encryptFile(imageData, conversationId: conversationId)
+        let encryptedData = try await encryptionService.encryptFile(imageData, conversationId: conversationId)
         
         // Create unique filename
         let filename = "\(UUID().uuidString).enc"  // .enc extension for encrypted
@@ -169,7 +169,7 @@ class ImageService {
         let (encryptedData, _) = try await URLSession.shared.data(from: url)
         
         // Decrypt the data
-        let decryptedData = try encryptionService.decryptFile(encryptedData, conversationId: conversationId)
+        let decryptedData = try await encryptionService.decryptFile(encryptedData, conversationId: conversationId)
         
         // Convert to UIImage
         guard let image = UIImage(data: decryptedData) else {
