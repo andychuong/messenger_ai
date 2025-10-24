@@ -12,12 +12,17 @@ import Combine
 
 @MainActor
 class MessageService: ObservableObject {
+    // MARK: - Singleton
+    // Phase 11: Shared instance for message queue service
+    static let shared = MessageService()
+    
     // MARK: - Shared Properties
     let db = Firestore.firestore()
     let conversationService = ConversationService()
     let encryptionService = EncryptionService.shared
     
     // MARK: - Initialization
+    // Note: Public init allows instance creation in ViewModels, but shared instance available for services
     init() {}
     
     // MARK: - Helper Methods

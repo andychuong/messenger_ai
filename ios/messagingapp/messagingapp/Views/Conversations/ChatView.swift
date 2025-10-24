@@ -11,6 +11,7 @@ struct ChatView: View {
     @StateObject private var viewModel: ChatViewModel
     @EnvironmentObject private var callViewModel: CallViewModel
     @EnvironmentObject private var toastManager: ToastManager
+    @EnvironmentObject private var networkMonitor: NetworkMonitor
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedMessageForThread: Message?
@@ -139,20 +140,29 @@ struct ChatView: View {
                     }
                     
                     // Call buttons (only for direct conversations)
+                    // Phase 11: Disable when offline
                     if !viewModel.isGroupChat, !viewModel.otherUserId.isEmpty {
                         // Voice call button
                         Button {
-                            callViewModel.startAudioCall(to: viewModel.otherUserId)
+                            if networkMonitor.isConnected {
+                                callViewModel.startAudioCall(to: viewModel.otherUserId)
+                            }
                         } label: {
                             Image(systemName: "phone.fill")
+                                .foregroundColor(networkMonitor.isConnected ? .primary : .gray)
                         }
+                        .disabled(!networkMonitor.isConnected)
                         
                         // Video call button
                         Button {
-                            callViewModel.startVideoCall(to: viewModel.otherUserId)
+                            if networkMonitor.isConnected {
+                                callViewModel.startVideoCall(to: viewModel.otherUserId)
+                            }
                         } label: {
                             Image(systemName: "video.fill")
+                                .foregroundColor(networkMonitor.isConnected ? .primary : .gray)
                         }
+                        .disabled(!networkMonitor.isConnected)
                     }
                 }
             }

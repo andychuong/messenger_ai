@@ -9,6 +9,7 @@ import SwiftUI
 
 struct MainTabView: View {
     @EnvironmentObject var authService: AuthService
+    @EnvironmentObject var networkMonitor: NetworkMonitor
     @StateObject private var toastManager = ToastManager()
     @StateObject private var messageListener = MessageToastListener()
     @StateObject private var callViewModel = CallViewModel()
@@ -16,7 +17,7 @@ struct MainTabView: View {
     @State private var navigationToConversationId: String?
     
     var body: some View {
-        ZStack {
+        ZStack(alignment: .top) {
         TabView(selection: $selectedTab) {
             // Conversations tab
             ConversationListView(navigationToConversationId: $navigationToConversationId)
@@ -87,6 +88,15 @@ struct MainTabView: View {
                 .transition(.move(edge: .bottom))
                 .zIndex(101)
         }
+        
+        // Phase 11: Offline banner
+        VStack {
+            OfflineBanner()
+                .environmentObject(networkMonitor)
+            Spacer()
+        }
+        .zIndex(102)
+        .allowsHitTesting(false)
         }
     }
 }

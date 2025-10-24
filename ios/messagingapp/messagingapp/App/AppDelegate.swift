@@ -24,8 +24,23 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         // Configure notification service
         // NotificationService.shared.configure()
         
+        // Phase 11: Register background tasks
+        BackgroundSyncService.shared.registerBackgroundTasks()
+        
         print("✅ AppDelegate: didFinishLaunchingWithOptions (Push notifications disabled)")
         return true
+    }
+    
+    // MARK: - Background Tasks (Phase 11)
+    
+    func applicationDidEnterBackground(_ application: UIApplication) {
+        print("📱 App entered background")
+        BackgroundSyncService.shared.handleAppDidEnterBackground()
+    }
+    
+    func applicationDidBecomeActive(_ application: UIApplication) {
+        print("📱 App became active")
+        BackgroundSyncService.shared.handleAppDidBecomeActive()
     }
     
     // MARK: - Remote Notification Registration

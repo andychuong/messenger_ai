@@ -8,6 +8,7 @@
 import SwiftUI
 import SwiftData
 import FirebaseCore
+import FirebaseFirestore
 
 @main
 struct messagingappApp: App {
@@ -18,13 +19,35 @@ struct messagingappApp: App {
     // Auth service (shared across app)
     @StateObject private var authService = AuthService()
     
+    // Network monitor (shared across app)
+    @StateObject private var networkMonitor = NetworkMonitor.shared
+    
     // Initialize Firebase
     init() {
         FirebaseApp.configure()
         print("✅ Firebase configured!")
         
+        // Phase 11: Enable Firestore offline persistence
+        configureFirestoreOfflineSupport()
+        
         // Initialize call service with user ID once authenticated
         // This will be set properly in the auth flow
+    }
+    
+    /// Configure Firestore for offline support
+    private func configureFirestoreOfflineSupport() {
+        let db = Firestore.firestore()
+        let settings = FirestoreSettings()
+        
+        // Phase 11: Enable offline persistence with persistent cache
+        // Using modern cacheSettings API instead of deprecated isPersistenceEnabled
+        settings.cacheSettings = PersistentCacheSettings(
+            sizeBytes: NSNumber(value: FirestoreCacheSizeUnlimited)
+        )
+        
+        db.settings = settings
+        
+        print("✅ Firestore offline persistence enabled with unlimited cache")
     }
     
     var sharedModelContainer: ModelContainer = {
@@ -49,6 +72,7 @@ struct messagingappApp: App {
             } else if authService.isAuthenticated {
                 MainTabView()
                     .environmentObject(authService)
+                    .environmentObject(networkMonitor)
                     .onAppear {
                         // Set current user ID for call service
                         if let userId = authService.currentUser?.id {

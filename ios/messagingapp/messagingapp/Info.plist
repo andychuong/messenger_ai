@@ -7,6 +7,11 @@
 		<string>audio</string>
 		<string>voip</string>
 		<string>fetch</string>
+		<string>processing</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.messagingapp.backgroundSync</string>
 	</array>
 </dict>
 </plist>

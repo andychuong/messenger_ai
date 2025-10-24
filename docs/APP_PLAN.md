@@ -1097,87 +1097,43 @@ Implementation:
 - [x] Validate encrypted mode disables AI features end-to-end
 - [x] Stage rollout with analytics to monitor adoption and regressions
 
-### Phase 10: Push Notifications (Day 27)
-
-#### 10.1 Push Notification Setup
-- [ ] Configure APNs in Apple Developer account
-  - [ ] Create APNs key
-  - [ ] Upload to Firebase Console
-- [ ] Request notification permissions in app
-  - [ ] Show permission prompt
-  - [ ] Handle authorization status
-- [ ] Build `PushNotificationService.swift`
-  - [ ] Register for remote notifications
-  - [ ] Store FCM token in Firestore
-  - [ ] Handle token refresh
-  - [ ] Process incoming notifications
-
-#### 10.2 Notification Triggers
-- [ ] Create Cloud Function `sendMessageNotification`
-  - [ ] Trigger on new message
-  - [ ] Check if recipient online
-  - [ ] Construct notification payload
-  - [ ] Send via FCM to recipient's token
-  - [ ] Include: sender name, message preview, conversation ID
-- [ ] Create Cloud Function `sendCallNotification`
-  - [ ] VoIP notification type
-  - [ ] Include caller info
-- [ ] Create Cloud Function `sendFriendRequestNotification`
-
-#### 10.3 Notification Handling
-- [ ] Handle foreground notifications
-  - [ ] Show banner
-  - [ ] Update UI in real-time
-  - [ ] Play sound
-- [ ] Handle background notifications
-  - [ ] Update badge count
-  - [ ] Wake app if needed
-- [ ] Handle notification tap
-  - [ ] Deep link to conversation
-  - [ ] Open friend request view
-  - [ ] Accept/join call
-- [ ] Implement notification categories
-  - [ ] Quick reply from notification
-  - [ ] Mark as read action
-  - [ ] Accept/decline call actions
-
-### Phase 11: Offline Support & Sync (Day 28)
+### Phase 11: Offline Support & Sync (Day 27) ✅ COMPLETE
 
 #### 11.1 Offline Messaging
-- [ ] Implement message queue
-  - [ ] Store unsent messages locally
-  - [ ] Retry when connection restored
-  - [ ] Show "queued" status
-- [ ] Build `NetworkMonitor.swift`
-  - [ ] Monitor connection status
-  - [ ] Notify services of changes
-  - [ ] Display offline indicator
-- [ ] Enable Firestore offline persistence
-  - [ ] Configure cache size
-  - [ ] Handle cache eviction
-- [ ] Update UI for offline state
-  - [ ] Disable calling features
-  - [ ] Show "offline" banner
-  - [ ] Queue AI requests
+- [x] Implement message queue
+  - [x] Store unsent messages locally
+  - [x] Retry when connection restored
+  - [x] Show "queued" status
+- [x] Build `NetworkMonitor.swift`
+  - [x] Monitor connection status
+  - [x] Notify services of changes
+  - [x] Display offline indicator
+- [x] Enable Firestore offline persistence
+  - [x] Configure cache size
+  - [x] Handle cache eviction
+- [x] Update UI for offline state
+  - [x] Disable calling features
+  - [x] Show "offline" banner
+  - [x] Queue AI requests
 
 #### 11.2 Data Synchronization
-- [ ] Implement sync on app launch
-  - [ ] Fetch latest messages
-  - [ ] Update conversations
-  - [ ] Sync read receipts
-- [ ] Handle sync conflicts
-  - [ ] Server always wins
-  - [ ] Merge strategies for complex types
-- [ ] Background sync
-  - [ ] Use Background Tasks framework
-  - [ ] Sync messages periodically
-  - [ ] Respect battery and data settings
-- [ ] Optimize sync performance
-  - [ ] Only fetch updates since last sync
-  - [ ] Batch operations
-  - [ ] Prioritize active conversations
+- [x] Implement sync on app launch
+  - [x] Fetch latest messages
+  - [x] Update conversations
+  - [x] Sync read receipts
+- [x] Handle sync conflicts
+  - [x] Server always wins
+  - [x] Merge strategies for complex types
+- [x] Background sync
+  - [x] Use Background Tasks framework
+  - [x] Sync messages periodically
+  - [x] Respect battery and data settings
+- [x] Optimize sync performance
+  - [x] Only fetch updates since last sync
+  - [x] Batch operations
+  - [x] Prioritize active conversations
 
-### Phase 12: Polish & UX Improvements (Days 29-30)
+### Phase 12: Polish & UX Improvements (Days 28-29)
 
 #### 12.1 UI/UX Polish
 - [ ] Design app icon
@@ -1250,7 +1206,7 @@ Implementation:
   - [ ] Efficient sync strategy
   - [ ] Background task management
 
-### Phase 13: Testing (Days 31-32)
+### Phase 13: Testing (Days 30-31)
 
 #### 13.1 Unit Tests
 - [ ] Test ViewModels
@@ -1300,7 +1256,7 @@ Implementation:
 - [ ] Test authentication edge cases
 - [ ] Check for data leaks
 
-### Phase 14: Deployment & Documentation (Days 33-34)
+### Phase 14: Deployment & Documentation (Days 32-33)
 
 #### 14.1 App Store Preparation
 - [ ] Create App Store Connect listing
@@ -1349,6 +1305,52 @@ Implementation:
 - [ ] Merge to main branch
 - [ ] Tag release version
 
+### Phase 10: Push Notifications (Optional - Day 34+)
+
+**⚠️ Note: This phase requires a paid Apple Developer Account ($99/year) to configure APNs certificates and test push notifications on physical devices.**
+
+#### 10.1 Push Notification Setup
+- [ ] Configure APNs in Apple Developer account
+  - [ ] Create APNs key
+  - [ ] Upload to Firebase Console
+- [ ] Request notification permissions in app
+  - [ ] Show permission prompt
+  - [ ] Handle authorization status
+- [ ] Build `PushNotificationService.swift`
+  - [ ] Register for remote notifications
+  - [ ] Store FCM token in Firestore
+  - [ ] Handle token refresh
+  - [ ] Process incoming notifications
+
+#### 10.2 Notification Triggers
+- [ ] Create Cloud Function `sendMessageNotification`
+  - [ ] Trigger on new message
+  - [ ] Check if recipient online
+  - [ ] Construct notification payload
+  - [ ] Send via FCM to recipient's token
+  - [ ] Include: sender name, message preview, conversation ID
+- [ ] Create Cloud Function `sendCallNotification`
+  - [ ] VoIP notification type
+  - [ ] Include caller info
+- [ ] Create Cloud Function `sendFriendRequestNotification`
+
+#### 10.3 Notification Handling
+- [ ] Handle foreground notifications
+  - [ ] Show banner
+  - [ ] Update UI in real-time
+  - [ ] Play sound
+- [ ] Handle background notifications
+  - [ ] Update badge count
+  - [ ] Wake app if needed
+- [ ] Handle notification tap
+  - [ ] Deep link to conversation
+  - [ ] Open friend request view
+  - [ ] Accept/join call
+- [ ] Implement notification categories
+  - [ ] Quick reply from notification
+  - [ ] Mark as read action
+  - [ ] Accept/decline call actions
+
 ---
 
 ## Estimated Timeline
@@ -1368,12 +1370,12 @@ Implementation:
 | 8 | 4 | RAG & conversation intelligence |
 | 9 | 3 | AI chat assistant |
 | 9.5 | 1 | **Encryption toggle** |
-| 10 | 1 | Push notifications |
 | 11 | 1 | Offline support |
 | 12 | 2 | Polish & UX |
 | 13 | 2 | Testing |
 | 14 | 2 | Deployment & docs |
-| **Total** | **35 days** | |
+| 10 | 1+ | **Push notifications** (optional, requires paid Apple Dev account) |
+| **Total** | **34 days** | (35+ with push notifications) |
 
 *Note: Timeline can be adjusted based on priorities. MVP (Phases 1-4.5) can be completed in 8-12 days and includes full messaging with groups.*
 

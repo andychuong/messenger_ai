@@ -9,12 +9,28 @@ import SwiftUI
 
 struct AIAssistantView: View {
     @StateObject private var viewModel = AIAssistantViewModel()
+    @EnvironmentObject private var networkMonitor: NetworkMonitor
     @State private var scrollProxy: ScrollViewProxy?
+    @State private var showOfflineAlert = false
     @FocusState private var isTextFieldFocused: Bool
     
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
+                // Phase 11: Offline indicator
+                if !networkMonitor.isConnected {
+                    HStack {
+                        Image(systemName: "wifi.slash")
+                        Text("AI features require internet connection")
+                            .font(.caption)
+                    }
+                    .foregroundColor(.secondary)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.orange.opacity(0.1))
+                }
+                
+                Divider()
                 // Messages
                 ScrollViewReader { proxy in
                     ScrollView {
@@ -90,6 +106,12 @@ struct AIAssistantView: View {
                             }
                         
                         Button {
+                            // Phase 11: Check connectivity before sending
+                            if !networkMonitor.isConnected {
+                                showOfflineAlert = true
+                                return
+                            }
+                            
                             isTextFieldFocused = false
                             Task {
                                 await viewModel.sendMessage()
@@ -97,9 +119,9 @@ struct AIAssistantView: View {
                         } label: {
                             Image(systemName: "arrow.up.circle.fill")
                                 .font(.system(size: 32))
-                                .foregroundColor(viewModel.inputText.isEmpty ? .gray : .blue)
+                                .foregroundColor(viewModel.inputText.isEmpty || !networkMonitor.isConnected ? .gray : .blue)
                         }
-                        .disabled(viewModel.inputText.isEmpty || viewModel.isLoading)
+                        .disabled(viewModel.inputText.isEmpty || viewModel.isLoading || !networkMonitor.isConnected)
                     }
                     .padding(.horizontal)
                     .padding(.vertical, 8)
@@ -127,6 +149,12 @@ struct AIAssistantView: View {
                 }
             } message: {
                 Text(viewModel.error ?? "")
+            }
+            // Phase 11: Offline alert
+            .alert("No Internet Connection", isPresented: $showOfflineAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("AI features require an active internet connection. Please check your connection and try again.")
             }
         }
     }

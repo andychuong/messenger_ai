@@ -14,9 +14,39 @@ extension MessageService {
     
     /// Send a text message
     /// Phase 9.5 Redesign: Per-message encryption control
+    /// Phase 11: Offline support with message queue
     func sendMessage(conversationId: String, text: String, shouldEncrypt: Bool = true) async throws -> Message {
         let currentUserId = try getCurrentUserId()
         let displayName = try await getCurrentUserDisplayName()
+        
+        // Phase 11: Check if offline and queue message
+        let isConnected = NetworkMonitor.shared.isConnected
+        
+        if !isConnected {
+            // Create message with queued status
+            let queuedMessage = Message.create(
+                conversationId: conversationId,
+                senderId: currentUserId,
+                senderName: displayName,
+                text: text,
+                isEncrypted: shouldEncrypt
+            )
+            var messageWithId = queuedMessage
+            let messageId = UUID().uuidString
+            messageWithId.id = messageId
+            messageWithId.status = .sending
+            
+            // Add to queue
+            await MessageQueueService.shared.queueTextMessage(
+                id: messageId,
+                conversationId: conversationId,
+                text: text,
+                shouldEncrypt: shouldEncrypt
+            )
+            
+            print("📤 MessageService: Queued message (offline) for conversation \(conversationId)")
+            return messageWithId
+        }
         
         // Encrypt message text if shouldEncrypt is true
         let encryptedText = shouldEncrypt ? try await encryptionService.encryptMessage(text, conversationId: conversationId) : text
