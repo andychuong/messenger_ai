@@ -12,7 +12,8 @@
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log",
     "test": "jest",
-    "lint": "eslint --ext .ts src/"
+    "lint": "eslint --ext .ts src/",
+    "cleanup": "npm run build && node lib/scripts/cleanupConversations.js"
   },
   "engines": {
     "node": "18"

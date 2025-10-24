@@ -38,6 +38,33 @@ interface ConversationMessage {
 }
 
 /**
+ * Phase 9.5 Redesign: Check if conversation has encrypted messages
+ */
+async function checkForEncryptedMessages(conversationId: string): Promise<boolean> {
+  const admin = await import("firebase-admin");
+  
+  // Check last 10 messages for encrypted ones
+  const messagesSnapshot = await admin.firestore()
+    .collection("conversations")
+    .doc(conversationId)
+    .collection("messages")
+    .orderBy("timestamp", "desc")
+    .limit(10)
+    .get();
+  
+  // Check if any recent messages are encrypted (isEncrypted = true or null/undefined for backward compatibility)
+  for (const doc of messagesSnapshot.docs) {
+    const data = doc.data();
+    const isEncrypted = data.isEncrypted ?? true; // Default to true for backward compatibility
+    if (isEncrypted) {
+      return true; // Found at least one encrypted message
+    }
+  }
+  
+  return false;
+}
+
+/**
  * Chat with AI assistant using GPT-4o with function calling
  * Main entry point for all AI assistant interactions
  */
@@ -48,12 +75,25 @@ export const chatWithAssistant = functions.https.onCall(async (data: AssistantRe
   
   const { query, conversationId, userId, conversationHistory = [] } = data;
   
+  // Phase 9.5 Redesign: Per-message encryption
+  // AI Assistant now works with all conversations, but only processes unencrypted messages
+  // (Messages without embeddings are automatically excluded from search results)
+  
   try {
+    // Check if recent messages are encrypted and inform user
+    let encryptionNotice = "";
+    if (conversationId) {
+      const hasEncryptedMessages = await checkForEncryptedMessages(conversationId);
+      if (hasEncryptedMessages) {
+        encryptionNotice = "\n\nIMPORTANT: Some recent messages in this conversation are encrypted (🔒) and cannot be accessed by AI. Only unencrypted messages (🔓 AI-enhanced) are available for search, translation, and analysis. If the user asks about recent messages, inform them that encrypted messages are not visible to you.";
+      }
+    }
+    
     // Build messages array with conversation history
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       {
         role: "system",
-        content: getSystemPrompt(userId, conversationId),
+        content: getSystemPrompt(userId, conversationId) + encryptionNotice,
       },
       // Add conversation history
       ...conversationHistory.map((msg) => ({

@@ -37,6 +37,10 @@ export const translateMessage = functions.https.onCall(async (data: TranslationR
   
   const { messageId, conversationId, targetLanguage, text } = data;
   
+  // Phase 9.5 Redesign: Per-message encryption
+  // Translation works for all messages, but only unencrypted messages have embeddings
+  // Encrypted messages can still be translated if the client passes the decrypted text
+  
   try {
     let originalText: string;
     let messageRef;

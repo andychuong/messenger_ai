@@ -35,6 +35,7 @@ service cloud.firestore {
         request.resource.data.displayName.size() <= 50;
       
       // Phase 6: Allow updates including public key for E2EE
+      // Phase 9.5: Allow encryption mode updates
       allow update: if isOwner(userId) &&
         request.resource.data.email == resource.data.email; // Cannot change email
       
@@ -94,16 +95,17 @@ service cloud.firestore {
         isParticipant(request.resource.data.participants);
       
       // Phase 4.5: Group-aware update rules
+      // Phase 9.5: Allow participants to toggle encryption mode
       // Can update conversation if:
       // 1. You're an admin (for group settings, adding/removing members)
       // 2. You're leaving the group
-      // 3. You're a participant (for lastMessage, read receipts, etc.)
+      // 3. You're a participant (for lastMessage, read receipts, encryption mode, etc.)
       allow update: if isSignedIn() && (
         // Admin can modify all group settings
         (resource.data.get('type', 'direct') == 'group' && isAdmin()) ||
         // Anyone can leave a group
         (resource.data.get('type', 'direct') == 'group' && isLeavingGroup()) ||
-        // Participants can update lastMessage, unreadCount, lastMessageTime (but not participants list or admins)
+        // Participants can update lastMessage, unreadCount, lastMessageTime, encryptionMode (but not participants list or admins)
         (isParticipant(resource.data.participants) && 
          request.resource.data.participants == resource.data.participants &&
          request.resource.data.get('admins', []) == resource.data.get('admins', []))
@@ -170,6 +172,13 @@ service cloud.firestore {
         // Can write your own typing status if you're a participant
         allow create, update, delete: if isSignedIn() && 
           isOwner(userId) &&
+          isParticipant(get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants);
+      }
+      
+      // Phase 9.5 Fix: Shared encryption keys subcollection
+      match /metadata/{docId} {
+        // Participants can read and write encryption keys
+        allow read, write: if isSignedIn() && 
           isParticipant(get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants);
       }
     }
