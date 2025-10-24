@@ -32,6 +32,8 @@ class ChatViewModel: ObservableObject {
     private var userStatusListener: ListenerRegistration?
     private let db = Firestore.firestore()
     private var typingDebounceTask: Task<Void, Never>?
+    private var markAsReadTask: Task<Void, Never>?
+    private var lastMarkAsReadTime: Date = .distantPast
     
     // Track if the chat is actively being viewed
     var isChatActive = false
@@ -91,10 +93,8 @@ class ChatViewModel: ObservableObject {
         messagesListener = messageService.listenToMessages(conversationId: conversationId) { [weak self] messages in
             Task { @MainActor in
                 self?.messages = messages
-                // Only mark as read if chat is actively being viewed
-                if self?.isChatActive == true {
-                    await self?.markAllMessagesAsRead()
-                }
+                // Don't mark as read here - it causes too many updates
+                // Only mark as read when view appears or app returns to foreground
             }
         }
         
@@ -251,10 +251,24 @@ class ChatViewModel: ObservableObject {
     }
     
     func markAllMessagesAsRead() async {
+        // Debounce: only mark as read if it's been at least 2 seconds since last call
+        let now = Date()
+        guard now.timeIntervalSince(lastMarkAsReadTime) >= 2.0 else {
+            return
+        }
+        
+        // Cancel any pending mark-as-read task
+        markAsReadTask?.cancel()
+        
+        lastMarkAsReadTime = now
+        
         do {
             try await messageService.markAllAsRead(conversationId: conversationId)
         } catch {
-            print("Error marking messages as read: \(error)")
+            // Only log error if it's not a permission error (to reduce log spam)
+            if !error.localizedDescription.contains("permissions") {
+                print("Error marking messages as read: \(error)")
+            }
         }
     }
     

@@ -156,5 +156,52 @@ extension MessageService {
             .collection("messages")
             .addDocument(data: message)
     }
+    
+    // MARK: - Group Event System Messages
+    
+    /// Send member added system message
+    func sendMemberAddedMessage(conversationId: String, memberName: String) async throws {
+        try await sendSystemMessage(
+            conversationId: conversationId,
+            text: "\(memberName) was added to the group",
+            systemType: "member_added"
+        )
+    }
+    
+    /// Send member removed system message
+    func sendMemberRemovedMessage(conversationId: String, memberName: String) async throws {
+        try await sendSystemMessage(
+            conversationId: conversationId,
+            text: "\(memberName) was removed from the group",
+            systemType: "member_removed"
+        )
+    }
+    
+    /// Send member left system message
+    func sendMemberLeftMessage(conversationId: String, memberName: String) async throws {
+        try await sendSystemMessage(
+            conversationId: conversationId,
+            text: "\(memberName) left the group",
+            systemType: "member_left"
+        )
+    }
+    
+    /// Send group name changed system message
+    func sendGroupNameChangedMessage(conversationId: String, newName: String) async throws {
+        try await sendSystemMessage(
+            conversationId: conversationId,
+            text: "Group name changed to \"\(newName)\"",
+            systemType: "name_changed"
+        )
+    }
+    
+    /// Send group created system message
+    func sendGroupCreatedMessage(conversationId: String, creatorName: String) async throws {
+        try await sendSystemMessage(
+            conversationId: conversationId,
+            text: "\(creatorName) created the group",
+            systemType: "group_created"
+        )
+    }
 }
 

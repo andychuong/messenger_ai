@@ -277,7 +277,7 @@ class ThreadViewModel: ObservableObject {
         guard let messageId = reply.id else { return }
         
         do {
-            try await messageService.deleteMessage(messageId: messageId, conversationId: conversationId)
+            try await messageService.deleteMessage(conversationId: conversationId, messageId: messageId)
             replies.removeAll { $0.id == messageId }
         } catch {
             errorMessage = "Failed to delete reply: \(error.localizedDescription)"
@@ -291,8 +291,8 @@ class ThreadViewModel: ObservableObject {
         
         do {
             try await messageService.addReaction(
-                messageId: messageId,
                 conversationId: conversationId,
+                messageId: messageId,
                 emoji: emoji
             )
         } catch {

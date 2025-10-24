@@ -17,6 +17,8 @@ struct ChatView: View {
     @State private var shouldScrollToBottom = false
     @State private var showingGroupInfo = false
     @State private var showingAIAssistant = false
+    @State private var previousMessageCount = 0
+    @State private var userHasScrolled = false
     @FocusState private var isInputFocused: Bool
     
     // Phase 4.5: Support for both direct and group conversations
@@ -59,6 +61,8 @@ struct ChatView: View {
                 onSend: {
                     Task {
                         await viewModel.sendMessage()
+                        // Reset scroll flag when sending message
+                        userHasScrolled = false
                         // Re-focus after sending to keep keyboard open
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                             isInputFocused = true
@@ -168,6 +172,9 @@ struct ChatView: View {
             }
             // Set active conversation to prevent toasts for this chat
             toastManager.activeConversationId = viewModel.conversationId
+            // Initialize message count tracking
+            previousMessageCount = viewModel.messages.count
+            userHasScrolled = false
         }
         .onDisappear {
             viewModel.isChatActive = false
@@ -301,9 +308,19 @@ struct ChatView: View {
                 .padding(.top, 8)
             }
             .defaultScrollAnchor(.bottom)
-            .onChange(of: viewModel.messages.count) { _, _ in
-                // Scroll to bottom when new message arrives
-                scrollToBottom(scrollProxy)
+            .onChange(of: viewModel.messages.count) { oldCount, newCount in
+                // Only scroll to bottom if:
+                // 1. New message was added (count increased)
+                // 2. AND user hasn't manually scrolled up
+                if newCount > previousMessageCount {
+                    // Give a small delay to determine if user is at bottom
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                        if !userHasScrolled {
+                            scrollToBottom(scrollProxy)
+                        }
+                    }
+                }
+                previousMessageCount = newCount
             }
             .onChange(of: shouldScrollToBottom) { _, newValue in
                 // Scroll to bottom when returning from thread

@@ -171,7 +171,7 @@ struct GroupInfoView: View {
             do {
                 guard let conversationId = conversation.id,
                       let memberId = member.id,
-                      let currentUser = Auth.auth().currentUser else { return }
+                      Auth.auth().currentUser != nil else { return }
                 
                 try await conversationService.removeMemberFromGroup(
                     conversationId: conversationId,
@@ -179,11 +179,9 @@ struct GroupInfoView: View {
                 )
                 
                 // Send system message
-                let currentUserName = currentUser.displayName ?? "Admin"
                 try await messageService.sendMemberRemovedMessage(
                     conversationId: conversationId,
-                    removedByName: currentUserName,
-                    removedUserName: member.displayName
+                    memberName: member.displayName
                 )
                 
                 loadMembers()
@@ -205,7 +203,7 @@ struct GroupInfoView: View {
                 // Send system message before leaving
                 try await messageService.sendMemberLeftMessage(
                     conversationId: conversationId,
-                    userName: userName
+                    memberName: userName
                 )
                 
                 try await conversationService.leaveGroup(conversationId: conversationId)
@@ -342,11 +340,9 @@ struct EditGroupView: View {
                 )
                 
                 // Send system message
-                if let currentUser = Auth.auth().currentUser {
-                    let userName = currentUser.displayName ?? "Admin"
+                if Auth.auth().currentUser != nil {
                     try await messageService.sendGroupNameChangedMessage(
                         conversationId: conversationId,
-                        changedByName: userName,
                         newName: groupName
                     )
                 }
@@ -480,15 +476,12 @@ struct AddMembersToGroupView: View {
                 )
                 
                 // Send system messages for each added member
-                if let currentUser = Auth.auth().currentUser {
-                    let currentUserName = currentUser.displayName ?? "Admin"
-                    
+                if Auth.auth().currentUser != nil {
                     for memberId in memberIds {
                         if let friend = availableFriends.first(where: { $0.id == memberId }) {
                             try await messageService.sendMemberAddedMessage(
                                 conversationId: conversationId,
-                                addedByName: currentUserName,
-                                addedUserName: friend.displayName
+                                memberName: friend.displayName
                             )
                         }
                     }
