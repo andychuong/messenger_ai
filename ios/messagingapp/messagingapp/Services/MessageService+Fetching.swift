@@ -59,7 +59,7 @@ extension MessageService {
                         guard var message = try? document.data(as: Message.self) else { continue }
                         
                         // Decrypt if needed
-                        if message.isEncrypted {
+                        if message.isEncrypted == true {
                             do {
                                 let decryptedText = try await self.encryptionService.decryptMessage(
                                     message.text,
@@ -94,7 +94,7 @@ extension MessageService {
         }
         
         // Check if message is encrypted
-        if message.isEncrypted {
+        if message.isEncrypted == true {
             do {
                 let decryptedText = try await encryptionService.decryptMessage(
                     message.text,

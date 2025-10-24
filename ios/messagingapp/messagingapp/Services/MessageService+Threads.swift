@@ -118,7 +118,7 @@ extension MessageService {
                         guard var message = try? document.data(as: Message.self) else { continue }
                         
                         // Decrypt if needed
-                        if message.isEncrypted {
+                        if message.isEncrypted == true {
                             do {
                                 let decryptedText = try await self.encryptionService.decryptMessage(
                                     message.text,
@@ -168,7 +168,7 @@ extension MessageService {
     private func decryptMessageIfNeeded(_ message: Message, conversationId: String) async throws -> Message {
         var decryptedMessage = message
         
-        if message.isEncrypted && message.type == .text {
+        if message.isEncrypted == true && message.type == .text {
             do {
                 let decryptedText = try await encryptionService.decryptMessage(
                     message.text,
