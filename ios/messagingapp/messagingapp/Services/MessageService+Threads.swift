@@ -31,8 +31,7 @@ extension MessageService {
             senderName: displayName,
             text: encryptedText
         )
-        message.threadId = parentMessageId
-        message.isThreadReply = true
+        message.replyTo = parentMessageId
         
         // Save to thread subcollection
         let threadRef = db.collection("conversations")
