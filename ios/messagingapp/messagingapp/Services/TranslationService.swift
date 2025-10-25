@@ -157,6 +157,44 @@ class TranslationService: ObservableObject {
     func clearCache(for messageId: String) {
         cachedTranslations.removeValue(forKey: messageId)
     }
+    
+    /// Translate text directly without requiring a message ID
+    /// - Parameters:
+    ///   - text: The text to translate
+    ///   - targetLanguage: Target language for translation
+    /// - Returns: Translation result
+    func translateText(
+        text: String,
+        targetLanguage: String
+    ) async throws -> TranslationResult {
+        let data: [String: Any] = [
+            "text": text,
+            "targetLanguage": targetLanguage
+        ]
+        
+        do {
+            let result = try await functions.httpsCallable("translateText").call(data)
+            
+            guard let resultData = result.data as? [String: Any],
+                  let originalText = resultData["originalText"] as? String,
+                  let translatedText = resultData["translatedText"] as? String,
+                  let language = resultData["targetLanguage"] as? String else {
+                throw TranslationError.invalidResponse
+            }
+            
+            return TranslationResult(
+                originalText: originalText,
+                translatedText: translatedText,
+                targetLanguage: language,
+                fromCache: false
+            )
+        } catch {
+            print("Translation error: \(error.localizedDescription)")
+            throw TranslationError.translationFailed(error.localizedDescription)
+        }
+    }
+    
+    static let shared = TranslationService()
 }
 
 // MARK: - Models

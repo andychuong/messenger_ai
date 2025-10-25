@@ -4,6 +4,16 @@ import FirebaseAuth
 import SwiftUI
 import Combine
 
+// MARK: - Array Extension for Batching
+
+extension Array {
+    func chunked(into size: Int) -> [[Element]] {
+        return stride(from: 0, to: count, by: size).map {
+            Array(self[$0 ..< Swift.min($0 + size, count)])
+        }
+    }
+}
+
 @MainActor
 class ChatViewModel: ObservableObject {
     @Published var messages: [Message] = []
@@ -122,6 +132,9 @@ class ChatViewModel: ObservableObject {
             Task { @MainActor in
                 guard let self = self else { return }
                 
+                // Check if this is the initial load (messages were empty)
+                let isInitialLoad = self.messages.isEmpty && !messages.isEmpty
+                
                 // Check for new messages
                 let oldMessageIds = Set(self.messages.compactMap { $0.id })
                 let newMessages = messages.filter { message in
@@ -131,8 +144,12 @@ class ChatViewModel: ObservableObject {
                 
                 self.messages = messages
                 
-                // Auto-translate new unencrypted messages if enabled
-                if self.autoTranslateEnabled {
+                // If this is the initial load and auto-translate is enabled, translate all messages
+                if isInitialLoad && self.autoTranslateEnabled && !self.isTranslating {
+                    print("🌐 Initial load with auto-translate enabled - translating all messages")
+                    await self.translateVisibleMessages()
+                } else if self.autoTranslateEnabled {
+                    // Auto-translate only new messages
                     for message in newMessages {
                         await self.translateNewMessage(message)
                     }
@@ -265,6 +282,12 @@ class ChatViewModel: ObservableObject {
             // Only mark as read if chat is actively being viewed
             if isChatActive {
                 await markAllMessagesAsRead()
+            }
+            
+            // If auto-translate is enabled, translate the loaded messages
+            if autoTranslateEnabled && !messages.isEmpty {
+                print("🌐 Auto-translate enabled - translating loaded messages")
+                await translateVisibleMessages()
             }
         } catch {
             errorMessage = "Failed to load messages: \(error.localizedDescription)"
@@ -574,12 +597,8 @@ class ChatViewModel: ObservableObject {
             autoTranslateEnabled = UserDefaults.standard.bool(forKey: autoTranslatePreferenceKey)
             print("📝 Loaded auto-translate preference for conversation \(conversationId): \(autoTranslateEnabled ? "enabled" : "disabled")")
             
-            // If auto-translate is enabled, translate messages
-            if autoTranslateEnabled {
-                Task {
-                    await translateVisibleMessages()
-                }
-            }
+            // Note: Don't translate here - messages aren't loaded yet
+            // Translation will be triggered after loadMessages() completes
         }
     }
     
@@ -590,6 +609,7 @@ class ChatViewModel: ObservableObject {
     }
     
     /// Translate all visible messages (encrypted and unencrypted)
+    /// Optimized to start from most recent messages and use batch translation
     func translateVisibleMessages() async {
         guard autoTranslateEnabled,
               let targetLanguage = SettingsService.shared.settings.preferredLanguage,
@@ -601,38 +621,67 @@ class ChatViewModel: ObservableObject {
         isTranslating = true
         
         // Get all translatable messages (exclude system messages)
+        // REVERSED: Start from most recent messages
         let translatableMessages = messages.filter { message in
             return !message.text.isEmpty && message.type != .system
+        }.reversed()
+        
+        // Filter out already translated messages
+        let untranslatedMessages = translatableMessages.filter { message in
+            guard let messageId = message.id else { return false }
+            return translatedMessages[messageId] == nil
         }
         
-        print("🌐 Translating \(translatableMessages.count) messages to \(targetLanguage)")
+        let totalCount = Array(untranslatedMessages).count
+        print("🌐 Translating \(totalCount) messages to \(targetLanguage) (newest first)")
         
-        // Translate each message individually (with caching)
-        for message in translatableMessages {
-            guard let messageId = message.id else { continue }
+        // Process in batches of 10 for better performance
+        let batchSize = 10
+        let messageBatches = Array(untranslatedMessages).chunked(into: batchSize)
+        
+        for (batchIndex, batch) in messageBatches.enumerated() {
+            print("📦 Processing batch \(batchIndex + 1)/\(messageBatches.count)")
             
-            // Skip if already translated
-            if translatedMessages[messageId] != nil {
-                continue
+            // Translate batch concurrently
+            await withTaskGroup(of: (String, String?)?.self) { group in
+                for message in batch {
+                    guard let messageId = message.id else { continue }
+                    
+                    group.addTask {
+                        do {
+                            // For encrypted messages, pass the decrypted text
+                            let result = try await self.translationService.translateMessage(
+                                messageId: messageId,
+                                conversationId: self.conversationId,
+                                targetLanguage: targetLanguage,
+                                text: message.text
+                            )
+                            return (messageId, result.translatedText)
+                        } catch {
+                            print("❌ Failed to translate message \(messageId): \(error.localizedDescription)")
+                            return nil
+                        }
+                    }
+                }
+                
+                // Collect results and update UI incrementally
+                for await result in group {
+                    if let (messageId, translatedText) = result {
+                        await MainActor.run {
+                            self.translatedMessages[messageId] = translatedText
+                        }
+                    }
+                }
             }
             
-            do {
-                // For encrypted messages, pass the decrypted text (which is already in message.text)
-                // Messages are decrypted when fetched, so message.text contains the readable text
-                let result = try await translationService.translateMessage(
-                    messageId: messageId,
-                    conversationId: conversationId,
-                    targetLanguage: targetLanguage,
-                    text: message.text  // Pass the decrypted text
-                )
-                
-                translatedMessages[messageId] = result.translatedText
-            } catch {
-                print("❌ Failed to translate message \(messageId): \(error.localizedDescription)")
+            // Small delay between batches to avoid overwhelming the API
+            if batchIndex < messageBatches.count - 1 {
+                try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
             }
         }
         
         isTranslating = false
+        print("✅ Translation complete!")
     }
     
     /// Translate a single new message (encrypted or unencrypted)

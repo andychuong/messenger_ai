@@ -138,6 +138,72 @@ Maintain the tone, style, and any emojis. Only return the translated text, nothi
 });
 
 /**
+ * Translate text directly without storing to database
+ * Used for pre-send translation (hold send button feature)
+ */
+export const translateText = functions.https.onCall(async (data: { text: string; targetLanguage: string }, context) => {
+  // Verify authentication
+  if (!context.auth) {
+    throw new functions.https.HttpsError(
+      "unauthenticated",
+      "User must be authenticated to translate text"
+    );
+  }
+  
+  const { text, targetLanguage } = data;
+  
+  if (!text || !targetLanguage) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Text and target language are required"
+    );
+  }
+  
+  try {
+    console.log(`Translating text to ${targetLanguage}`);
+    
+    // Translate using GPT-4o
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "system",
+          content: `You are a professional translator. Translate the following message to ${targetLanguage}. 
+Maintain the tone, style, and any emojis. Only return the translated text, nothing else.`,
+        },
+        {
+          role: "user",
+          content: text,
+        },
+      ],
+      temperature: 0.3,
+      max_tokens: 1000,
+    });
+    
+    const translatedText = completion.choices[0]?.message?.content?.trim();
+    
+    if (!translatedText) {
+      throw new functions.https.HttpsError("internal", "Translation failed");
+    }
+    
+    console.log(`Successfully translated text to ${targetLanguage}`);
+    
+    return {
+      originalText: text,
+      translatedText,
+      targetLanguage,
+      fromCache: false,
+    };
+  } catch (error) {
+    console.error("Translation error:", error);
+    if (error instanceof functions.https.HttpsError) {
+      throw error;
+    }
+    throw new functions.https.HttpsError("internal", "Failed to translate text");
+  }
+});
+
+/**
  * Batch translate multiple messages
  * Useful for translating entire conversations
  */

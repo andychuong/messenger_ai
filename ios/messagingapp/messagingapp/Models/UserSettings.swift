@@ -25,6 +25,11 @@ struct UserSettings: Codable {
     // MARK: - Translation
     var preferredLanguage: String? = nil // User's preferred language for auto-translation
     
+    // MARK: - Phase 15: Enhanced Translation Features
+    var culturalContextEnabled: Bool = true
+    var slangAnalysisEnabled: Bool = true
+    var formalityAdjustmentEnabled: Bool = true
+    
     // MARK: - Notifications (for future use)
     var notificationsEnabled: Bool = true
     var messagePreviewEnabled: Bool = true

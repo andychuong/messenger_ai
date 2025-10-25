@@ -20,7 +20,16 @@ struct ChatView: View {
     @State private var showingAIAssistant = false
     @State private var previousMessageCount = 0
     @State private var showingLanguageQuickPicker = false
+    @State private var showingFormalityAdjuster = false
+    @State private var showingSendTranslatedMenu = false
+    @State private var isTranslatingSend = false
+    @State private var languagePickerMode: LanguagePickerMode = .preference
     @FocusState private var isInputFocused: Bool
+    
+    enum LanguagePickerMode {
+        case preference  // Normal mode: set preferred language
+        case translateSend  // Translate and send the current message
+    }
     
     // Phase 4.5: Support for both direct and group conversations
     init(conversation: Conversation) {
@@ -69,35 +78,169 @@ struct ChatView: View {
                     .animation(.spring(response: 0.3, dampingFraction: 0.7), value: typingText)
             }
             
-            // Input bar with encryption toggle
-            MessageInputBar(
-                text: $viewModel.messageText,
-                onSend: {
-                    Task {
-                        await viewModel.sendMessage()
-                        // Re-focus after sending to keep keyboard open
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                            isInputFocused = true
+            // Input bar with encryption toggle and formality adjustment
+            VStack(spacing: 0) {
+                // Edit mode indicator
+                if viewModel.isEditingMessage {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Edit Message")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.blue)
+                            
+                            Text(viewModel.editingMessage?.text ?? "")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                        }
+                        
+                        Spacer()
+                        
+                        Button {
+                            viewModel.cancelEditing()
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.gray)
                         }
                     }
-                },
-                isSending: viewModel.isSending,
-                isEditing: viewModel.isEditingMessage,
-                editingMessageText: viewModel.editingMessage?.text ?? "",
-                onCancelEdit: {
-                    viewModel.cancelEditing()
-                },
-                onImagePick: {
-                    viewModel.showingImagePicker = true
-                },
-                onVoiceRecord: {
-                    viewModel.showingVoiceRecorder = true
-                },
-                nextMessageEncrypted: viewModel.nextMessageEncrypted,
-                onToggleEncryption: {
-                    viewModel.toggleNextMessageEncryption()
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                    .background(Color(.systemGray6))
                 }
-            )
+                
+                HStack(alignment: .center, spacing: 12) {
+                    // Encryption toggle
+                    if !viewModel.isEditingMessage {
+                        Button {
+                            HapticManager.shared.toggleChanged()
+                            SoundManager.shared.buttonTap()
+                            viewModel.toggleNextMessageEncryption()
+                        } label: {
+                            Image(systemName: viewModel.nextMessageEncrypted ? "lock.fill" : "lock.open.fill")
+                                .font(.title2)
+                                .foregroundColor(viewModel.nextMessageEncrypted ? .orange : .blue)
+                        }
+                        .disabled(viewModel.isSending)
+                    }
+                    
+                    // Image picker button
+                    if !viewModel.isEditingMessage {
+                        Button {
+                            HapticManager.shared.light()
+                            viewModel.showingImagePicker = true
+                        } label: {
+                            Image(systemName: "photo")
+                                .font(.title2)
+                                .foregroundColor(.blue)
+                        }
+                        .disabled(viewModel.isSending)
+                    }
+                    
+                    // Phase 15: Formality adjustment button
+                    if !viewModel.isEditingMessage,
+                       !viewModel.nextMessageEncrypted,
+                       !viewModel.messageText.isEmpty,
+                       SettingsService.shared.settings.formalityAdjustmentEnabled {
+                        Button {
+                            showingFormalityAdjuster = true
+                            HapticManager.shared.light()
+                        } label: {
+                            Image(systemName: "text.alignleft")
+                                .font(.title2)
+                                .foregroundColor(.purple)
+                        }
+                        .disabled(viewModel.isSending)
+                    }
+                    
+                    // Text input with microphone button
+                    HStack(spacing: 8) {
+                        TextField(
+                            viewModel.isEditingMessage ? "Edit message" : (viewModel.nextMessageEncrypted ? "Encrypted message" : "AI-enhanced message"),
+                            text: $viewModel.messageText,
+                            axis: .vertical
+                        )
+                        .textFieldStyle(.plain)
+                        .padding(.leading, 12)
+                        .padding(.vertical, 8)
+                        .lineLimit(1...5)
+                        .focused($isInputFocused)
+                        .disabled(viewModel.isSending)
+                        .onSubmit {
+                            if !viewModel.messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Task {
+                                    await viewModel.sendMessage()
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                                        isInputFocused = true
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Microphone button inside text field
+                        if !viewModel.isEditingMessage, viewModel.messageText.isEmpty {
+                            Button {
+                                HapticManager.shared.medium()
+                                viewModel.showingVoiceRecorder = true
+                            } label: {
+                                Image(systemName: "mic.fill")
+                                    .font(.title3)
+                                    .foregroundColor(.blue)
+                            }
+                            .disabled(viewModel.isSending)
+                            .padding(.trailing, 8)
+                        }
+                    }
+                    .background(Color(.systemGray6))
+                    .cornerRadius(20)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(Color(.systemGray4), lineWidth: 0.5)
+                    )
+                    
+                    // Send button with long-press for translation
+                    ZStack {
+                        if viewModel.isSending || isTranslatingSend {
+                            ProgressView()
+                                .tint(.white)
+                                .frame(width: 36, height: 36)
+                        } else {
+                            Image(systemName: viewModel.isEditingMessage ? "checkmark.circle.fill" : "arrow.up.circle.fill")
+                                .font(.system(size: 36))
+                                .foregroundColor(viewModel.messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .gray : .blue)
+                        }
+                    }
+                    .contentShape(Circle())
+                    .onLongPressGesture(minimumDuration: 0.5, pressing: { isPressing in
+                        if isPressing {
+                            HapticManager.shared.light()
+                        }
+                    }) {
+                        // Long press action - show translation menu
+                        if !viewModel.messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !viewModel.isEditingMessage {
+                            HapticManager.shared.medium()
+                            showingSendTranslatedMenu = true
+                        }
+                    }
+                    .onTapGesture {
+                        // Regular tap action - send message
+                        if !viewModel.messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            HapticManager.shared.messageSent()
+                            SoundManager.shared.messageSent()
+                            Task {
+                                await viewModel.sendMessage()
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                                    isInputFocused = true
+                                }
+                            }
+                        }
+                    }
+                    .disabled(viewModel.messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isSending || isTranslatingSend)
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+            }
+            .background(Color(.systemBackground))
             .focused($isInputFocused)
             .onChange(of: viewModel.messageText) { oldValue, newValue in
                 viewModel.handleTextChange()
@@ -127,15 +270,82 @@ struct ChatView: View {
                 currentLanguage: SettingsService.shared.settings.preferredLanguage,
                 autoTranslateEnabled: viewModel.autoTranslateEnabled,
                 onLanguageSelected: { language in
-                    SettingsService.shared.updatePreferredLanguage(language)
-                    // Enable auto-translation if a language is selected
-                    if language != nil && !viewModel.autoTranslateEnabled {
-                        viewModel.toggleAutoTranslation()
-                    }
                     showingLanguageQuickPicker = false
+                    
+                    // Handle based on mode
+                    if languagePickerMode == .translateSend {
+                        // Translate and send
+                        if let selectedLanguage = language {
+                            sendTranslatedMessage(to: selectedLanguage)
+                        }
+                        languagePickerMode = .preference // Reset mode
+                    } else {
+                        // Normal preference setting
+                        SettingsService.shared.updatePreferredLanguage(language)
+                        // Enable auto-translation if a language is selected
+                        if language != nil && !viewModel.autoTranslateEnabled {
+                            viewModel.toggleAutoTranslation()
+                        }
+                    }
                 }
             )
             .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showingFormalityAdjuster) {
+            FormalityAdjusterView(
+                messageText: $viewModel.messageText,
+                language: SettingsService.shared.settings.preferredLanguage ?? "English",
+                onApply: { adjustedText in
+                    viewModel.messageText = adjustedText
+                },
+                onDismiss: {
+                    showingFormalityAdjuster = false
+                }
+            )
+        }
+        .confirmationDialog("Send Translated Message", isPresented: $showingSendTranslatedMenu, titleVisibility: .visible) {
+            // Popular languages
+            Button("Spanish") {
+                sendTranslatedMessage(to: "Spanish")
+            }
+            
+            Button("French") {
+                sendTranslatedMessage(to: "French")
+            }
+            
+            Button("German") {
+                sendTranslatedMessage(to: "German")
+            }
+            
+            Button("Japanese") {
+                sendTranslatedMessage(to: "Japanese")
+            }
+            
+            Button("Chinese") {
+                sendTranslatedMessage(to: "Chinese")
+            }
+            
+            Button("Italian") {
+                sendTranslatedMessage(to: "Italian")
+            }
+            
+            Button("Portuguese") {
+                sendTranslatedMessage(to: "Portuguese")
+            }
+            
+            Button("More Languages...") {
+                showingSendTranslatedMenu = false
+                languagePickerMode = .translateSend
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    showingLanguageQuickPicker = true
+                }
+            }
+            
+            Button("Cancel", role: .cancel) {
+                showingSendTranslatedMenu = false
+            }
+        } message: {
+            Text("Choose a language to translate your message to before sending")
         }
         .onAppear {
             viewModel.isChatActive = true
@@ -391,6 +601,7 @@ struct ChatView: View {
             LongPressGesture(minimumDuration: 0.5)
                 .onEnded { _ in
                     HapticManager.shared.medium()
+                    languagePickerMode = .preference
                     showingLanguageQuickPicker = true
                 }
         )
@@ -479,6 +690,56 @@ struct ChatView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
+    }
+    
+    // MARK: - Helper Functions
+    
+    /// Translates the current message and sends it
+    /// - Parameter targetLanguage: The language to translate to
+    private func sendTranslatedMessage(to targetLanguage: String) {
+        guard !viewModel.messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
+        
+        let originalText = viewModel.messageText
+        
+        Task {
+            isTranslatingSend = true
+            
+            do {
+                // Call translation service
+                let translationService = TranslationService.shared
+                let result = try await translationService.translateText(
+                    text: originalText,
+                    targetLanguage: targetLanguage
+                )
+                
+                // Replace message text with translated version
+                await MainActor.run {
+                    viewModel.messageText = result.translatedText
+                }
+                
+                // Send the translated message
+                HapticManager.shared.messageSent()
+                SoundManager.shared.messageSent()
+                
+                await viewModel.sendMessage()
+                
+                // Re-focus after sending
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    isInputFocused = true
+                    isTranslatingSend = false
+                }
+                
+            } catch {
+                print("Translation error: \(error)")
+                // Show error through view model
+                await MainActor.run {
+                    viewModel.errorMessage = "Failed to translate message: \(error.localizedDescription)"
+                    isTranslatingSend = false
+                }
+            }
+        }
     }
 }
 

@@ -21,6 +21,9 @@ struct SettingsView: View {
             // Translation Section
             translationSection
             
+            // Phase 15: Enhanced Translation Features
+            enhancedTranslationSection
+            
             // Feedback Section
             feedbackSection
             
@@ -94,6 +97,58 @@ struct SettingsView: View {
             Text("Translation")
         } footer: {
             Text("Set your preferred language for auto-translation of messages. You can enable auto-translation per conversation in the chat view.")
+        }
+    }
+    
+    // MARK: - Phase 15: Enhanced Translation Section
+    
+    private var enhancedTranslationSection: some View {
+        Section {
+            Toggle(isOn: $settingsService.settings.culturalContextEnabled) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("Cultural Context", systemImage: "info.circle")
+                    Text("Show cultural notes and idioms for translated messages")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .onChange(of: settingsService.settings.culturalContextEnabled) { _, newValue in
+                HapticManager.shared.selection()
+                // Update UserDefaults for services
+                UserDefaults.standard.set(newValue, forKey: "culturalContextEnabled")
+            }
+            
+            Toggle(isOn: $settingsService.settings.slangAnalysisEnabled) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("Slang Detection", systemImage: "sparkles")
+                    Text("Detect and explain slang, idioms, and colloquial expressions")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .onChange(of: settingsService.settings.slangAnalysisEnabled) { _, newValue in
+                HapticManager.shared.selection()
+                // Update UserDefaults for services
+                UserDefaults.standard.set(newValue, forKey: "slangAnalysisEnabled")
+            }
+            
+            Toggle(isOn: $settingsService.settings.formalityAdjustmentEnabled) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("Formality Adjustment", systemImage: "text.alignleft")
+                    Text("Adjust the formality level of your messages before sending")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .onChange(of: settingsService.settings.formalityAdjustmentEnabled) { _, newValue in
+                HapticManager.shared.selection()
+                // Update UserDefaults for services
+                UserDefaults.standard.set(newValue, forKey: "formalityAdjustmentEnabled")
+            }
+        } header: {
+            Text("AI-Enhanced Translation")
+        } footer: {
+            Text("Advanced AI features to help you communicate more effectively across cultures and languages. These features require an active internet connection.")
         }
     }
     

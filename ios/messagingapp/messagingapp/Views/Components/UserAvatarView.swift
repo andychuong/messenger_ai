@@ -10,6 +10,7 @@ import SwiftUI
 struct UserAvatarView: View {
     let photoURL: String?
     let displayName: String
+    let userId: String? // For consistent color generation
     let size: CGFloat
     let showOnlineStatus: Bool
     let isOnline: Bool
@@ -17,12 +18,14 @@ struct UserAvatarView: View {
     init(
         photoURL: String? = nil,
         displayName: String,
+        userId: String? = nil,
         size: CGFloat = 50,
         showOnlineStatus: Bool = false,
         isOnline: Bool = false
     ) {
         self.photoURL = photoURL
         self.displayName = displayName
+        self.userId = userId
         self.size = size
         self.showOnlineStatus = showOnlineStatus
         self.isOnline = isOnline
@@ -52,9 +55,9 @@ struct UserAvatarView: View {
             }
             
             // Online status indicator
-            if showOnlineStatus && isOnline {
+            if showOnlineStatus {
                 Circle()
-                    .fill(Color.green)
+                    .fill(isOnline ? Color.green : Color.gray)
                     .frame(width: size * 0.28, height: size * 0.28)
                     .overlay(
                         Circle()
@@ -66,7 +69,9 @@ struct UserAvatarView: View {
     
     private var avatarInitial: some View {
         let initials = ColorGenerator.initials(from: displayName)
-        let backgroundColor = ColorGenerator.color(for: displayName)
+        // Use userId for color generation if available, otherwise fall back to displayName
+        let colorKey = userId ?? displayName
+        let backgroundColor = ColorGenerator.color(for: colorKey)
         
         return Circle()
             .fill(backgroundColor.opacity(0.15))
@@ -86,6 +91,7 @@ extension UserAvatarView {
         self.init(
             photoURL: user.photoURL,
             displayName: user.displayName,
+            userId: user.id,
             size: size,
             showOnlineStatus: showOnlineStatus,
             isOnline: user.status == .online
@@ -96,6 +102,7 @@ extension UserAvatarView {
         self.init(
             photoURL: participant.photoURL,
             displayName: participant.name,
+            userId: participant.email, // Use email as unique identifier
             size: size,
             showOnlineStatus: showOnlineStatus,
             isOnline: participant.status == "online"

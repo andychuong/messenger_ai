@@ -33,6 +33,10 @@ export * from "./ai/voiceToText";
 export * from "./ai/actionItems";
 export * from "./ai/decisions";
 export * from "./ai/priority";
+// Phase 15: Enhanced Translation Features
+export * from "./ai/culturalContext"; // Cultural context hints
+export * from "./ai/formalityAdjustment"; // Formality level adjustments
+export * from "./ai/slangExplanation"; // Slang and idiom explanations
 
 /**
  * Health check function

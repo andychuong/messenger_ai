@@ -188,26 +188,12 @@ struct FriendRow: View {
             onTapFriend(user)
         }) {
             HStack(spacing: 16) {
-                // Profile Picture with online status
-                ZStack(alignment: .bottomTrailing) {
-                    Circle()
-                        .fill(Color.blue.gradient)
-                        .frame(width: 50, height: 50)
-                        .overlay(
-                            Text(user.displayName.prefix(1).uppercased())
-                                .font(.title3)
-                                .foregroundColor(.white)
-                        )
-                    
-                    // Online status indicator
-                    Circle()
-                        .fill(user.status == .online ? Color.green : Color.gray)
-                        .frame(width: 14, height: 14)
-                        .overlay(
-                            Circle()
-                                .stroke(Color.white, lineWidth: 2)
-                        )
-                }
+                // Profile Picture with online status - using UserAvatarView for consistency
+                UserAvatarView(
+                    user: user,
+                    size: 50,
+                    showOnlineStatus: true
+                )
                 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(user.displayName)
