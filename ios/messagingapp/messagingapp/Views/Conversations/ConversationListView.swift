@@ -12,6 +12,7 @@ struct ConversationListView: View {
     @EnvironmentObject private var toastManager: ToastManager
     @EnvironmentObject private var callViewModel: CallViewModel
     @State private var showingNewChat = false
+    @State private var newConversationToNavigate: Conversation?
     @Binding var navigationToConversationId: String?
     
     var body: some View {
@@ -40,7 +41,10 @@ struct ConversationListView: View {
                 await viewModel.loadConversations()
             }
             .sheet(isPresented: $showingNewChat) {
-                NewMessageView()
+                NewMessageView { conversation in
+                    // Navigate to the newly created conversation
+                    newConversationToNavigate = conversation
+                }
             }
             .navigationDestination(item: $navigationToConversationId) { conversationId in
                 // Find the conversation and navigate to it
@@ -52,6 +56,15 @@ struct ConversationListView: View {
                             }
                         }
                 }
+            }
+            .navigationDestination(item: $newConversationToNavigate) { conversation in
+                // Navigate to newly created conversation
+                ChatView(conversation: conversation)
+                    .onAppear {
+                        Task {
+                            await viewModel.markAsRead(conversation)
+                        }
+                    }
             }
         }
     }
@@ -144,23 +157,35 @@ struct ConversationRow: View {
         HStack(spacing: 12) {
             // Profile picture - Phase 4.5: Different icon for groups
             ZStack(alignment: .bottomTrailing) {
-                Circle()
-                    .fill(Color.blue.opacity(0.2))
-                    .frame(width: 56, height: 56)
-                    .overlay(
-                        Group {
-                            if conversation.type == .group {
-                                Image(systemName: "person.3.fill")
-                                    .font(.title3)
-                                    .foregroundColor(.blue)
-                            } else {
-                                Text(conversation.title(currentUserId: currentUserId).prefix(1).uppercased())
-                                    .font(.title2)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.blue)
-                            }
-                        }
+                if conversation.type == .group {
+                    // Group icon
+                    Circle()
+                        .fill(Color.blue.opacity(0.2))
+                        .frame(width: 56, height: 56)
+                        .overlay(
+                            Image(systemName: "person.3.fill")
+                                .font(.title3)
+                                .foregroundColor(.blue)
+                        )
+                } else if let otherUser = otherUser {
+                    // Direct chat - use UserAvatarView with online status
+                    UserAvatarView(
+                        participant: otherUser,
+                        size: 56,
+                        showOnlineStatus: true
                     )
+                } else {
+                    // Fallback
+                    Circle()
+                        .fill(Color.blue.opacity(0.2))
+                        .frame(width: 56, height: 56)
+                        .overlay(
+                            Text(conversation.title(currentUserId: currentUserId).prefix(1).uppercased())
+                                .font(.title2)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.blue)
+                        )
+                }
                 
                 // Phase 8: Priority indicator (top-left badge)
                 if hasPriorityMessages && unreadCount > 0 {
@@ -173,17 +198,6 @@ struct ConversationRow: View {
                                 .foregroundColor(.white)
                         )
                         .offset(x: -8, y: -8)
-                }
-                
-                // Online status indicator (only for direct chats)
-                if conversation.type == .direct && otherUser?.status == "online" {
-                    Circle()
-                        .fill(Color.green)
-                        .frame(width: 16, height: 16)
-                        .overlay(
-                            Circle()
-                                .stroke(Color.white, lineWidth: 2)
-                        )
                 }
             }
             

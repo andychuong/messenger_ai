@@ -25,7 +25,10 @@ export * from "./messaging/friendships";
 export * from "./messaging/callNotifications";
 export * from "./ai/translation";
 export * from "./ai/assistant";
+export * from "./ai/langchainAgent"; // LangChain-powered agent
 export * from "./ai/embeddings";
+export * from "./ai/cleanupEmbeddings"; // Cleanup invalid embeddings
+export * from "./ai/debugDatabase"; // Database health check
 export * from "./ai/voiceToText";
 export * from "./ai/actionItems";
 export * from "./ai/decisions";

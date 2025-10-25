@@ -105,6 +105,10 @@ struct MessageInputBar: View {
                 }
                 .background(Color(.systemGray6))
                 .cornerRadius(20)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(Color(.systemGray4), lineWidth: 0.5)
+                )
                 
                 // Send/Update button
                 Button {

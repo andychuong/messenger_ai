@@ -68,22 +68,9 @@ extension MessageService {
         let docRef = try await messageRef.addDocument(data: try Firestore.Encoder().encode(message))
         try await docRef.updateData(["status": MessageStatus.sent.rawValue])
         
-        // Phase 9.5 Redesign: Only save embeddings if message is NOT encrypted
-        // When encrypted, we skip AI indexing for privacy
-        if !shouldEncrypt {
-            do {
-                try await db.collection("embeddings").document(docRef.documentID).setData([
-                    "conversationId": conversationId,
-                    "messageId": docRef.documentID,
-                    "text": text,
-                    "senderId": currentUserId,
-                    "timestamp": Timestamp(date: message.timestamp),
-                    "createdAt": FieldValue.serverTimestamp()
-                ])
-            } catch {
-                print("⚠️  Failed to save embedding: \(error). AI features may not work for this message.")
-            }
-        }
+        // Embeddings are now generated server-side by Firebase trigger
+        // The generateMessageEmbedding function will automatically create embeddings
+        // for unencrypted messages (it checks if message.text exists)
         
         // Create message with ID and original text for local display
         var sentMessage = message
@@ -178,6 +165,8 @@ extension MessageService {
     ) async throws {
         let message: [String: Any] = [
             "conversationId": conversationId,
+            "senderId": "system",
+            "senderName": "System",
             "text": text,
             "timestamp": FieldValue.serverTimestamp(),
             "type": "system",

@@ -166,9 +166,9 @@ struct CreateGroupView: View {
                 )
                 
                 // Send system message
-                if let currentUser = Auth.auth().currentUser {
-                    // Get current user name from friends list or use display name
-                    let userName = currentUser.displayName ?? "User"
+                if let currentUserId = Auth.auth().currentUser?.uid {
+                    // Get current user name from the conversation participant details
+                    let userName = conversation.participantDetails[currentUserId]?.name ?? "User"
                     
                     try await messageService.sendGroupCreatedMessage(
                         conversationId: conversation.id ?? "",

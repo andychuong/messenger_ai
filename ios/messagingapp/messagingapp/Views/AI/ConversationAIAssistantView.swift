@@ -72,15 +72,8 @@ struct ConversationAIAssistantView: View {
                     }
                 }
                 
-                Divider()
-                
                 // Input area
                 VStack(spacing: 12) {
-                    // Quick actions
-                    if viewModel.inputText.isEmpty && !viewModel.isLoading {
-                        conversationQuickActionsView
-                    }
-                    
                     // Input field
                     HStack(spacing: 12) {
                         TextField("Ask about this conversation...", text: $viewModel.inputText, axis: .vertical)

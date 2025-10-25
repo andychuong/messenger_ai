@@ -34,20 +34,8 @@ export const generateMessageEmbedding = functions.firestore
     }
     
     try {
-      // Check if embedding already exists (created by iOS client with unencrypted text)
-      const existingEmbedding = await admin.firestore()
-        .collection("embeddings")
-        .doc(messageId)
-        .get();
-      
-      if (existingEmbedding.exists) {
-        console.log(`Embedding already exists for message ${messageId}, skipping`);
-        return null;
-      }
-      
-      // Generate embedding using OpenAI (for messages from other clients)
-      // Note: iOS client creates embeddings directly with unencrypted text
-      // This is a fallback for web/other clients
+      // Always generate embeddings (overwrite if exists)
+      // This ensures we have proper embeddings even if iOS client created empty docs
       const response = await openai.embeddings.create({
         model: "text-embedding-3-large",
         input: message.text,

@@ -24,6 +24,8 @@ class ConversationListViewModel: ObservableObject {
     
     private let conversationService = ConversationService()
     private var conversationsListener: ListenerRegistration?
+    private var userStatusListeners: [String: ListenerRegistration] = [:] // userId -> listener
+    private let db = Firestore.firestore()
     
     var currentUserId: String? {
         return Auth.auth().currentUser?.uid
@@ -41,6 +43,9 @@ class ConversationListViewModel: ObservableObject {
     
     deinit {
         conversationsListener?.remove()
+        // Remove all user status listeners
+        userStatusListeners.values.forEach { $0.remove() }
+        userStatusListeners.removeAll()
     }
     
     // MARK: - Setup
@@ -50,8 +55,67 @@ class ConversationListViewModel: ObservableObject {
             Task { @MainActor in
                 self?.conversations = conversations
                 self?.filterConversations()
+                // Set up status listeners for all participants
+                self?.setupUserStatusListeners()
             }
         }
+    }
+    
+    // MARK: - User Status Tracking
+    
+    /// Set up real-time listeners for all participants' online status
+    private func setupUserStatusListeners() {
+        guard let currentUserId = currentUserId else { return }
+        
+        // Collect all unique participant IDs (excluding current user)
+        var participantIds = Set<String>()
+        for conversation in conversations {
+            for participantId in conversation.participants where participantId != currentUserId {
+                participantIds.insert(participantId)
+            }
+        }
+        
+        // Remove listeners for users no longer in any conversation
+        let existingIds = Set(userStatusListeners.keys)
+        let idsToRemove = existingIds.subtracting(participantIds)
+        for userId in idsToRemove {
+            userStatusListeners[userId]?.remove()
+            userStatusListeners.removeValue(forKey: userId)
+        }
+        
+        // Add listeners for new users
+        for userId in participantIds {
+            // Skip if already listening
+            guard userStatusListeners[userId] == nil else { continue }
+            
+            let listener = db.collection("users")
+                .document(userId)
+                .addSnapshotListener { [weak self] snapshot, error in
+                    guard let self = self,
+                          let data = snapshot?.data(),
+                          let statusString = data["status"] as? String else {
+                        return
+                    }
+                    
+                    Task { @MainActor in
+                        self.updateUserStatus(userId: userId, status: statusString)
+                    }
+                }
+            
+            userStatusListeners[userId] = listener
+        }
+    }
+    
+    /// Update the status for a specific user across all conversations
+    private func updateUserStatus(userId: String, status: String) {
+        // Update status in all conversations where this user is a participant
+        for i in 0..<conversations.count {
+            if conversations[i].participantDetails[userId] != nil {
+                conversations[i].participantDetails[userId]?.status = status
+            }
+        }
+        // Trigger UI update
+        filterConversations()
     }
     
     // MARK: - Load Conversations

@@ -6,10 +6,11 @@ An advanced iOS messaging application with AI-powered conversation intelligence,
 
 ## 🎯 Current Status
 
-**Latest Release:** Phase 12 (In Progress) - Enhanced Group Chat UX  
+**Latest Release:** Phase 12 + LangChain Integration  
 **Date:** October 25, 2025  
 **Platform:** iOS 17.0+  
-**Backend:** Firebase + OpenAI GPT-4o
+**Backend:** Firebase + OpenAI GPT-4o + LangChain  
+**Status:** ✅ LangChain Agent Fully Operational
 
 ---
 
@@ -31,14 +32,16 @@ An advanced iOS messaging application with AI-powered conversation intelligence,
 - 🌍 AI-powered message translation
 - 🔔 Push notifications (configurable)
 
-### AI Intelligence (Phases 7-9)
+### AI Intelligence (Phases 7-9 + LangChain)
 - 🤖 **AI Chat Assistant** - Conversational interface to your messages
+- 🔗 **LangChain Agent** - Intelligent tool orchestration for fluid conversations
 - 🔍 **Semantic Search** - Find messages by meaning, not keywords
 - ✅ **Action Item Tracking** - AI extracts and tracks tasks
 - 💡 **Decision Logging** - Automatic detection of important decisions
 - ⚠️ **Priority Detection** - AI identifies urgent messages
 - 📊 **Conversation Summaries** - Get instant overviews of long chats
 - 🧠 **RAG Pipeline** - Question answering with context
+- 🎯 **Multi-Step Reasoning** - Agent chains tools for complex queries
 
 ---
 
@@ -105,7 +108,68 @@ All read:      8:09 PM 🔵🔴🟣     (only circles, checkmark gone!)
 
 ---
 
+## 🔗 LangChain AI Agent Enhancement
+
+**New Implementation:** The AI Assistant now uses **LangChain** with an OpenAI Functions Agent for more intelligent, fluid conversations.
+
+### What is LangChain?
+LangChain is a framework for building applications with Large Language Models. It provides:
+- **Intelligent Agents**: AI that reasons and uses tools automatically
+- **Better Memory**: Improved context management across conversations
+- **Tool Orchestration**: Seamlessly chains multiple tools together
+- **Chain of Thought**: More sophisticated reasoning patterns
+
+### Key Benefits
+1. **Smarter Queries**: Agent automatically decides which tools to use
+2. **Multi-Step Tasks**: Can perform complex workflows without manual chaining
+3. **Natural Conversations**: Better understanding of user intent and context
+4. **Automatic Tool Selection**: No need to explicitly specify actions
+
+### Example Queries
+```
+❓ "Who was the last person I said hello to?"
+   → Agent searches all conversations, finds the greeting, identifies sender
+
+❓ "Translate my last message to Chinese and send it"
+   → Agent fetches recent messages, translates, and sends automatically
+
+❓ "Find decisions about the budget and create action items"
+   → Agent searches for decisions, extracts actionable tasks, creates items
+```
+
+### Available Tools
+The agent has access to 8 intelligent tools:
+- 🔍 `search_messages` - Semantic search across conversations
+- 📄 `summarize_conversation` - Extract key points and insights
+- ✅ `get_action_items` - Retrieve and filter tasks
+- 💡 `get_decisions` - Find important decisions
+- ⚠️ `get_priority_messages` - Identify urgent messages
+- 🌍 `translate_text` - AI-powered translation
+- 📥 `get_recent_messages` - Fetch recent chat history
+- 📤 `send_message` - Send messages on your behalf
+
+### Technical Details
+- **Model**: GPT-4o via LangChain
+- **Temperature**: 0.7 (balanced creativity/accuracy)
+- **Max Iterations**: 10 (prevents infinite loops)
+- **Context Window**: Optimized for relevant history
+
+### Maintenance & Cleanup
+- **Automated**: `scheduledEmbeddingCleanup` runs daily at 2 AM UTC
+- **Manual**: Call `cleanupInvalidEmbeddings` function to remove invalid embeddings
+- **Health Check**: `debugDatabase` function to inspect system state
+
+### Documentation
+- **Architecture**: `LANGCHAIN_ARCHITECTURE.md` - Complete system design
+- **Troubleshooting**: `docs/archive/LANGCHAIN_TROUBLESHOOTING.md`
+- **Cleanup Guide**: `docs/archive/CLEANUP_INSTRUCTIONS.md`
+- **Summary**: `docs/archive/LANGCHAIN_COMPLETE.md`
+
+---
+
 ## 🏗️ Architecture
+
+> **📐 See [ARCHITECTURE.md](ARCHITECTURE.md) for complete system architecture with detailed diagrams**
 
 ### Frontend (iOS)
 ```
@@ -116,25 +180,28 @@ State: Combine + @Observable
 Authentication: Firebase Auth
 Real-time: Firebase Firestore listeners
 Calls: WebRTC
+Security: AES-256-GCM E2E encryption
 ```
 
 ### Backend (Firebase)
 ```
-Functions: Node.js (TypeScript)
-Database: Cloud Firestore
-Storage: Firebase Storage
+Functions: Node.js 18 (TypeScript)
+Database: Cloud Firestore (NoSQL)
+Storage: Firebase Cloud Storage
 Auth: Firebase Authentication
 AI: OpenAI GPT-4o
-Embeddings: text-embedding-3-large
+Embeddings: text-embedding-3-large (1536 dim)
 ```
 
-### AI Stack
+### AI Stack (LangChain)
 ```
+Agent: OpenAI Functions Agent
 LLM: GPT-4o with function calling
-Vector Store: Firestore (1536 dimensions)
+Vector Store: Firestore embeddings
 Voice-to-Text: Whisper API
 Translation: GPT-4o
-RAG: Custom implementation
+Semantic Search: Cosine similarity on 1536-dim vectors
+Tools: 8 intelligent tools (search, summarize, translate, etc.)
 ```
 
 ---
@@ -536,6 +603,44 @@ Developed by [Your Team/Name]
 - **Features:** 45+
 - **Phases Completed:** 9/12 (Phase 12 in progress)
 - **Color Palette:** 10 unique colors for user identity
+
+---
+
+## 📚 Documentation Index
+
+### Architecture & Design
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Complete system architecture with detailed diagrams
+  - Full stack visualization
+  - All data flows (messaging, AI, calling, encryption)
+  - Database schema & relationships
+  - Security architecture
+  - Performance characteristics
+  - Technology stack
+
+- **[LANGCHAIN_ARCHITECTURE.md](LANGCHAIN_ARCHITECTURE.md)** - LangChain AI Agent deep dive
+  - Agent architecture & components
+  - Tool implementations
+  - Embedding system
+  - Semantic search internals
+
+### Quick References
+- **[LANGCHAIN_QUICK_REFERENCE.md](LANGCHAIN_QUICK_REFERENCE.md)** - Quick commands & examples
+  - Example queries
+  - Troubleshooting tips
+  - Common commands
+  - Cost breakdown
+
+### Implementation Guides
+- **[docs/TRANSLATION_FEATURES.md](docs/TRANSLATION_FEATURES.md)** - Translation system guide
+- **[docs/APP_PLAN.md](docs/APP_PLAN.md)** - Complete development roadmap (1500+ lines)
+
+### Troubleshooting & Maintenance
+- **[docs/archive/LANGCHAIN_TROUBLESHOOTING.md](docs/archive/LANGCHAIN_TROUBLESHOOTING.md)** - All bugs & solutions
+- **[docs/archive/CLEANUP_INSTRUCTIONS.md](docs/archive/CLEANUP_INSTRUCTIONS.md)** - Database cleanup guide
+- **[docs/archive/LANGCHAIN_COMPLETE.md](docs/archive/LANGCHAIN_COMPLETE.md)** - Implementation summary
+
+### Historical Documentation
+See `docs/archive/` for phase-by-phase implementation history (Phases 1-12)
 
 ---
 

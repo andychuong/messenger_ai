@@ -57,7 +57,87 @@ class AIService: ObservableObject {
     
     // MARK: - Main Chat Function
     
-    /// Chat with AI assistant
+    /// Chat with AI assistant using LangChain agent (more fluid and powerful)
+    func chatWithAgent(
+        query: String,
+        conversationId: String? = nil,
+        includeHistory: Bool = true
+    ) async throws -> AIAssistantResponse {
+        isLoading = true
+        defer { isLoading = false }
+        
+        guard let userId = AuthService.shared?.currentUser?.id else {
+            throw NSError(domain: "AIService", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
+        }
+        
+        // Add user message to history
+        let userMessage = AIConversationMessage(
+            role: "user",
+            content: query,
+            timestamp: Date()
+        )
+        conversationHistory.append(userMessage)
+        
+        // Prepare request data
+        var requestData: [String: Any] = [
+            "query": query,
+            "userId": userId
+        ]
+        
+        if let conversationId = conversationId {
+            requestData["conversationId"] = conversationId
+        }
+        
+        // Include conversation history if requested
+        if includeHistory && !conversationHistory.isEmpty {
+            let history = conversationHistory.suffix(10).map { msg in
+                [
+                    "role": msg.role,
+                    "content": msg.content,
+                    "timestamp": msg.timestamp.timeIntervalSince1970
+                ]
+            }
+            requestData["conversationHistory"] = history
+        }
+        
+        print("🤖 Sending request to chatWithAgent (LangChain):", requestData)
+        
+        do {
+            let result = try await functions.httpsCallable("chatWithAgent").call(requestData)
+            
+            guard let data = result.data as? [String: Any],
+                  let finalResponse = data["finalResponse"] as? String else {
+                throw NSError(domain: "AIService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid response format"])
+            }
+            
+            let toolsUsed = data["toolsUsed"] as? [String] ?? []
+            
+            let assistantResponse = AIAssistantResponse(
+                response: finalResponse,
+                toolsUsed: toolsUsed,
+                timestamp: Date().timeIntervalSince1970 * 1000
+            )
+            
+            // Add assistant response to history
+            let assistantMessage = AIConversationMessage(
+                role: "assistant",
+                content: finalResponse,
+                timestamp: Date()
+            )
+            conversationHistory.append(assistantMessage)
+            
+            print("✅ Received response from LangChain agent")
+            print("🔧 Tools used:", toolsUsed)
+            
+            return assistantResponse
+        } catch {
+            print("❌ Error chatting with LangChain agent:", error)
+            self.error = error
+            throw error
+        }
+    }
+    
+    /// Chat with AI assistant (original implementation)
     func chatWithAssistant(
         query: String,
         conversationId: String? = nil,

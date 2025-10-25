@@ -145,6 +145,7 @@ export async function semanticSearch(
     const embeddingResponse = await openai.embeddings.create({
       model: "text-embedding-3-large",
       input: query,
+      dimensions: 1536, // MUST match stored embeddings!
     });
 
     const queryEmbedding = embeddingResponse.data[0].embedding;
@@ -207,7 +208,14 @@ export async function semanticSearch(
       .filter((doc) => {
         const data = doc.data();
         // Only include messages from conversations user is in
-        return allowedConversationIds.includes(data.conversationId);
+        if (!allowedConversationIds.includes(data.conversationId)) {
+          return false;
+        }
+        // Filter out invalid embeddings (empty or wrong dimensions)
+        if (!data.embedding || !Array.isArray(data.embedding) || data.embedding.length !== 1536) {
+          return false;
+        }
+        return true;
       })
       .map((doc) => {
         const data = doc.data();
@@ -240,13 +248,13 @@ export async function semanticSearch(
       count: enrichedResults.length,
       query,
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Semantic search error:", error);
     return {
       results: [],
       count: 0,
       query,
-      error: "Search failed",
+      error: error.message || "Search failed",
     };
   }
 }

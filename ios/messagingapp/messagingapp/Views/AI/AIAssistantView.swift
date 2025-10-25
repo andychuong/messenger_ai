@@ -30,7 +30,6 @@ struct AIAssistantView: View {
                     .background(Color.orange.opacity(0.1))
                 }
                 
-                Divider()
                 // Messages
                 ScrollViewReader { proxy in
                     ScrollView {
@@ -79,15 +78,8 @@ struct AIAssistantView: View {
                     }
                 }
                 
-                Divider()
-                
                 // Input area
                 VStack(spacing: 12) {
-                    // Quick actions (show when input is empty)
-                    if viewModel.inputText.isEmpty && !viewModel.isLoading {
-                        quickActionsView
-                    }
-                    
                     // Input field
                     HStack(spacing: 12) {
                         TextField("Ask me anything...", text: $viewModel.inputText, axis: .vertical)

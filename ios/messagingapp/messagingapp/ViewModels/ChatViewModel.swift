@@ -589,7 +589,7 @@ class ChatViewModel: ObservableObject {
         print("💾 Saved auto-translate preference for conversation \(conversationId): \(autoTranslateEnabled ? "enabled" : "disabled")")
     }
     
-    /// Translate all visible unencrypted messages
+    /// Translate all visible messages (encrypted and unencrypted)
     func translateVisibleMessages() async {
         guard autoTranslateEnabled,
               let targetLanguage = SettingsService.shared.settings.preferredLanguage,
@@ -600,16 +600,15 @@ class ChatViewModel: ObservableObject {
         
         isTranslating = true
         
-        // Get unencrypted messages (messages without encryption or isEncrypted = false)
-        let unencryptedMessages = messages.filter { message in
-            let isEncrypted = message.isEncrypted ?? true // Default to true for backward compatibility
-            return !isEncrypted && !message.text.isEmpty && message.type != .system
+        // Get all translatable messages (exclude system messages)
+        let translatableMessages = messages.filter { message in
+            return !message.text.isEmpty && message.type != .system
         }
         
-        print("🌐 Translating \(unencryptedMessages.count) unencrypted messages to \(targetLanguage)")
+        print("🌐 Translating \(translatableMessages.count) messages to \(targetLanguage)")
         
         // Translate each message individually (with caching)
-        for message in unencryptedMessages {
+        for message in translatableMessages {
             guard let messageId = message.id else { continue }
             
             // Skip if already translated
@@ -618,10 +617,13 @@ class ChatViewModel: ObservableObject {
             }
             
             do {
+                // For encrypted messages, pass the decrypted text (which is already in message.text)
+                // Messages are decrypted when fetched, so message.text contains the readable text
                 let result = try await translationService.translateMessage(
                     messageId: messageId,
                     conversationId: conversationId,
-                    targetLanguage: targetLanguage
+                    targetLanguage: targetLanguage,
+                    text: message.text  // Pass the decrypted text
                 )
                 
                 translatedMessages[messageId] = result.translatedText
@@ -633,7 +635,7 @@ class ChatViewModel: ObservableObject {
         isTranslating = false
     }
     
-    /// Translate a single new message (called when a new unencrypted message arrives)
+    /// Translate a single new message (encrypted or unencrypted)
     func translateNewMessage(_ message: Message) async {
         guard autoTranslateEnabled,
               let targetLanguage = SettingsService.shared.settings.preferredLanguage,
@@ -642,9 +644,8 @@ class ChatViewModel: ObservableObject {
             return
         }
         
-        // Only translate unencrypted messages
-        let isEncrypted = message.isEncrypted ?? true
-        guard !isEncrypted && !message.text.isEmpty && message.type != .system else {
+        // Only translate non-system messages with text
+        guard !message.text.isEmpty && message.type != .system else {
             return
         }
         
@@ -654,10 +655,12 @@ class ChatViewModel: ObservableObject {
         }
         
         do {
+            // Pass the decrypted text (message.text is already decrypted when fetched)
             let result = try await translationService.translateMessage(
                 messageId: messageId,
                 conversationId: conversationId,
-                targetLanguage: targetLanguage
+                targetLanguage: targetLanguage,
+                text: message.text  // Pass the decrypted text
             )
             
             translatedMessages[messageId] = result.translatedText

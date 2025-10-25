@@ -16,9 +16,10 @@ struct NewMessageView: View {
     
     @State private var searchText = ""
     @State private var isCreatingConversation = false
-    @State private var selectedConversation: Conversation?
-    @State private var navigateToChat = false
     @State private var showingCreateGroup = false
+    
+    // Callback to pass conversation to parent for navigation
+    var onConversationSelected: ((Conversation) -> Void)?
     
     var body: some View {
         NavigationStack {
@@ -52,15 +53,14 @@ struct NewMessageView: View {
             .task {
                 await friendsViewModel.loadFriends()
             }
-            .navigationDestination(isPresented: $navigateToChat) {
-                if let conversation = selectedConversation {
-                    ChatView(conversation: conversation)
-                }
-            }
             .sheet(isPresented: $showingCreateGroup) {
                 CreateGroupView { conversation in
-                    selectedConversation = conversation
-                    navigateToChat = true
+                    // Dismiss the sheet and pass conversation to parent
+                    dismiss()
+                    // Small delay to ensure sheet is dismissed before navigating
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        onConversationSelected?(conversation)
+                    }
                 }
             }
         }
@@ -222,11 +222,16 @@ struct NewMessageView: View {
             userName: user.displayName,
             userEmail: user.email
         ) {
-            selectedConversation = conversation
-            navigateToChat = true
+            isCreatingConversation = false
+            // Dismiss the sheet and pass conversation to parent
+            dismiss()
+            // Small delay to ensure sheet is dismissed before navigating
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                onConversationSelected?(conversation)
+            }
+        } else {
+            isCreatingConversation = false
         }
-        
-        isCreatingConversation = false
     }
 }
 

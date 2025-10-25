@@ -64,7 +64,8 @@ class AIAssistantViewModel: ObservableObject {
         error = nil
         
         do {
-            let response = try await aiService.chatWithAssistant(
+            // Use LangChain agent for more fluid, intelligent responses
+            let response = try await aiService.chatWithAgent(
                 query: messageText,
                 conversationId: conversationId ?? currentConversationId,
                 includeHistory: true

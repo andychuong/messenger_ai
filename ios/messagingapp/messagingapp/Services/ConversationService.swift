@@ -258,13 +258,31 @@ class ConversationService: ObservableObject {
         var participantDetails: [String: ParticipantDetail] = [:]
         
         for userId in allParticipants {
-            let userDoc = try await db.collection("users").document(userId).getDocument()
-            if let userData = userDoc.data() {
+            do {
+                let userDoc = try await db.collection("users").document(userId).getDocument()
+                if let userData = userDoc.data() {
+                    participantDetails[userId] = ParticipantDetail(
+                        name: userData["displayName"] as? String ?? "Unknown",
+                        email: userData["email"] as? String ?? "",
+                        photoURL: userData["photoURL"] as? String,
+                        status: userData["status"] as? String
+                    )
+                } else {
+                    // Add placeholder data if user not found
+                    participantDetails[userId] = ParticipantDetail(
+                        name: "Unknown User",
+                        email: "",
+                        photoURL: nil,
+                        status: nil
+                    )
+                }
+            } catch {
+                // Add placeholder data on error
                 participantDetails[userId] = ParticipantDetail(
-                    name: userData["displayName"] as? String ?? "Unknown",
-                    email: userData["email"] as? String ?? "",
-                    photoURL: userData["photoURL"] as? String,
-                    status: userData["status"] as? String
+                    name: "Unknown User",
+                    email: "",
+                    photoURL: nil,
+                    status: nil
                 )
             }
         }
