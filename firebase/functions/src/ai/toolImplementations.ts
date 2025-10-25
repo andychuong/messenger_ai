@@ -149,7 +149,50 @@ export async function semanticSearch(
 
     const queryEmbedding = embeddingResponse.data[0].embedding;
 
-    // Get embeddings from Firestore
+    // Step 1: Get user's conversations to filter by permissions
+    let allowedConversationIds: string[] = [];
+    
+    if (conversationId) {
+      // If specific conversation requested, verify user has access
+      const convDoc = await admin.firestore().collection("conversations").doc(conversationId).get();
+      if (!convDoc.exists) {
+        return {
+          results: [],
+          count: 0,
+          query,
+          error: "Conversation not found",
+        };
+      }
+      const convData = convDoc.data();
+      if (!convData?.participants?.includes(userId)) {
+        return {
+          results: [],
+          count: 0,
+          query,
+          error: "Access denied",
+        };
+      }
+      allowedConversationIds = [conversationId];
+    } else {
+      // Fetch all conversations user is part of
+      const userConversationsSnap = await admin.firestore()
+        .collection("conversations")
+        .where("participants", "array-contains", userId)
+        .get();
+      
+      allowedConversationIds = userConversationsSnap.docs.map(doc => doc.id);
+      
+      if (allowedConversationIds.length === 0) {
+        return {
+          results: [],
+          count: 0,
+          query,
+          note: "No conversations found for user",
+        };
+      }
+    }
+
+    // Step 2: Get embeddings from Firestore (fetch more to filter later)
     let embeddingsQuery: FirebaseFirestore.Query = admin.firestore().collection("embeddings");
 
     // Filter by conversation if specified
@@ -159,26 +202,42 @@ export async function semanticSearch(
 
     const embeddingsSnap = await embeddingsQuery.limit(500).get();
 
-    // Calculate cosine similarity
-    const results = embeddingsSnap.docs.map((doc) => {
-      const data = doc.data();
-      const similarity = cosineSimilarity(queryEmbedding, data.embedding);
-      return {
-        messageId: data.messageId,
-        conversationId: data.conversationId,
-        text: data.text,
-        similarity,
-        timestamp: data.timestamp,
-      };
-    });
+    // Step 3: Calculate cosine similarity and filter by permissions
+    const results = embeddingsSnap.docs
+      .filter((doc) => {
+        const data = doc.data();
+        // Only include messages from conversations user is in
+        return allowedConversationIds.includes(data.conversationId);
+      })
+      .map((doc) => {
+        const data = doc.data();
+        const similarity = cosineSimilarity(queryEmbedding, data.embedding);
+        return {
+          messageId: data.messageId,
+          conversationId: data.conversationId,
+          text: data.text,
+          similarity,
+          timestamp: data.timestamp,
+          senderId: data.senderId,
+        };
+      });
 
     // Sort by similarity and return top results
     results.sort((a, b) => b.similarity - a.similarity);
     const topResults = results.slice(0, limit);
 
+    // Get sender names for better context
+    const senderIds = [...new Set(topResults.map(r => r.senderId))];
+    const senderNames = await getUserNames(senderIds);
+
+    const enrichedResults = topResults.map(result => ({
+      ...result,
+      senderName: senderNames[result.senderId] || "Unknown",
+    }));
+
     return {
-      results: topResults,
-      count: topResults.length,
+      results: enrichedResults,
+      count: enrichedResults.length,
       query,
     };
   } catch (error) {

@@ -53,17 +53,17 @@ export const assistantTools: OpenAI.Chat.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "search_messages",
-      description: "Search conversation history using semantic search",
+      description: "Search message history using semantic search. Searches across ALL user's conversations by default. Use this for questions like 'who did I say hello to', 'what did I talk about yesterday', etc. Only specify conversationId to limit search to a specific conversation.",
       parameters: {
         type: "object",
         properties: {
           query: {
             type: "string",
-            description: "Search query",
+            description: "Search query (e.g., 'hello', 'meeting tomorrow', 'project updates')",
           },
           conversationId: {
             type: "string",
-            description: "Optional: search within specific conversation",
+            description: "Optional: limit search to a specific conversation. Leave blank to search ALL conversations.",
           },
           limit: {
             type: "number",

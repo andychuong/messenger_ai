@@ -147,11 +147,15 @@ service cloud.firestore {
           request.resource.data.senderId == resource.data.senderId &&
           request.resource.data.conversationId == resource.data.conversationId;
         
-        // Can delete own messages only (or system messages by admins)
+        // Can delete messages if:
+        // 1. You sent the message
+        // 2. You're deleting a system message as an admin
+        // 3. You're a participant (for deleting entire conversation)
         allow delete: if isSignedIn() && (
           request.auth.uid == resource.data.senderId ||
           (resource.data.senderId == "system" && 
-           request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.get('admins', []))
+           request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.get('admins', [])) ||
+          isParticipant(get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants)
         );
       }
       
