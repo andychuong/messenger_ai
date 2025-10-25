@@ -24,9 +24,15 @@ class ChatViewModel: ObservableObject {
     // Phase 12: Changed default to unencrypted, saves user preference
     @Published var nextMessageEncrypted = false // Default to unencrypted (AI-enhanced)
     
+    // Auto-translation state
+    @Published var autoTranslateEnabled = false
+    @Published var translatedMessages: [String: String] = [:] // messageId -> translatedText
+    @Published var isTranslating = false
+    
     let voiceService = VoiceRecordingService()
     private var typingIndicator = TypingIndicatorService()
     private var typingCancellable: AnyCancellable?
+    private let translationService = TranslationService()
     
     private let messageService = MessageService()
     private let conversationService = ConversationService()
@@ -49,6 +55,11 @@ class ChatViewModel: ObservableObject {
     // UserDefaults key for encryption preference
     private var encryptionPreferenceKey: String {
         "encryptionPreference_\(conversationId)"
+    }
+    
+    // UserDefaults key for auto-translation preference
+    private var autoTranslatePreferenceKey: String {
+        "autoTranslate_\(conversationId)"
     }
     
     var currentUserId: String? {
@@ -85,6 +96,7 @@ class ChatViewModel: ObservableObject {
         
         // Phase 12: Load saved encryption preference for this conversation
         loadEncryptionPreference()
+        loadAutoTranslatePreference()
     }
     
     init(conversationId: String, otherUserId: String, otherUserName: String) {
@@ -94,6 +106,7 @@ class ChatViewModel: ObservableObject {
         
         // Phase 12: Load saved encryption preference for this conversation
         loadEncryptionPreference()
+        loadAutoTranslatePreference()
     }
     
     deinit {
@@ -107,22 +120,49 @@ class ChatViewModel: ObservableObject {
         
         messagesListener = messageService.listenToMessages(conversationId: conversationId) { [weak self] messages in
             Task { @MainActor in
-                self?.messages = messages
+                guard let self = self else { return }
+                
+                // Check for new messages
+                let oldMessageIds = Set(self.messages.compactMap { $0.id })
+                let newMessages = messages.filter { message in
+                    guard let messageId = message.id else { return false }
+                    return !oldMessageIds.contains(messageId)
+                }
+                
+                self.messages = messages
+                
+                // Auto-translate new unencrypted messages if enabled
+                if self.autoTranslateEnabled {
+                    for message in newMessages {
+                        await self.translateNewMessage(message)
+                    }
+                }
+                
                 // Mark as read if chat is active and new messages arrived
-                if self?.isChatActive == true {
-                    await self?.markAllMessagesAsRead()
+                if self.isChatActive {
+                    await self.markAllMessagesAsRead()
                 }
             }
         }
         
         conversationListener = conversationService.listenToConversation(conversationId: conversationId) { [weak self] conversation in
             Task { @MainActor in
-                self?.conversation = conversation
+                guard let self = self, let conversation = conversation else { return }
+                self.conversation = conversation
+                
+                // Set up user status listener when conversation loads (for direct chats)
+                if conversation.type == .direct && self.userStatusListener == nil {
+                    let otherUserId = conversation.otherParticipantId(currentUserId: currentUserId) ?? ""
+                    if !otherUserId.isEmpty {
+                        self.setupUserStatusListener(for: otherUserId)
+                    }
+                }
             }
         }
         
+        // Set up user status listener immediately if we have the otherUserId
         if !isGroupChat && !otherUserId.isEmpty {
-            setupUserStatusListener()
+            setupUserStatusListener(for: otherUserId)
         }
         
         // Start listening for typing indicators
@@ -194,9 +234,12 @@ class ChatViewModel: ObservableObject {
         typingCancellable?.cancel()
     }
     
-    private func setupUserStatusListener() {
+    private func setupUserStatusListener(for userId: String) {
+        // Remove existing listener if any
+        userStatusListener?.remove()
+        
         userStatusListener = db.collection("users")
-            .document(otherUserId)
+            .document(userId)
             .addSnapshotListener { [weak self] snapshot, error in
                 guard let self = self,
                       let data = snapshot?.data(),
@@ -207,6 +250,7 @@ class ChatViewModel: ObservableObject {
                 
                 Task { @MainActor in
                     self.otherUserStatus = status
+                    print("👤 User status updated: \(status.rawValue)")
                 }
             }
     }
@@ -503,5 +547,122 @@ class ChatViewModel: ObservableObject {
     private func saveEncryptionPreference() {
         UserDefaults.standard.set(nextMessageEncrypted, forKey: encryptionPreferenceKey)
         print("💾 Saved encryption preference for conversation \(conversationId): \(nextMessageEncrypted ? "encrypted" : "unencrypted")")
+    }
+    
+    // MARK: - Auto-Translation
+    
+    /// Toggle auto-translation for this conversation
+    func toggleAutoTranslation() {
+        autoTranslateEnabled.toggle()
+        saveAutoTranslatePreference()
+        
+        if autoTranslateEnabled {
+            print("🌐 Auto-translation enabled for conversation \(conversationId)")
+            // Translate all visible unencrypted messages
+            Task {
+                await translateVisibleMessages()
+            }
+        } else {
+            print("🌐 Auto-translation disabled for conversation \(conversationId)")
+            translatedMessages.removeAll()
+        }
+    }
+    
+    /// Load saved auto-translate preference for this conversation
+    private func loadAutoTranslatePreference() {
+        if UserDefaults.standard.object(forKey: autoTranslatePreferenceKey) != nil {
+            autoTranslateEnabled = UserDefaults.standard.bool(forKey: autoTranslatePreferenceKey)
+            print("📝 Loaded auto-translate preference for conversation \(conversationId): \(autoTranslateEnabled ? "enabled" : "disabled")")
+            
+            // If auto-translate is enabled, translate messages
+            if autoTranslateEnabled {
+                Task {
+                    await translateVisibleMessages()
+                }
+            }
+        }
+    }
+    
+    /// Save auto-translate preference for this conversation
+    private func saveAutoTranslatePreference() {
+        UserDefaults.standard.set(autoTranslateEnabled, forKey: autoTranslatePreferenceKey)
+        print("💾 Saved auto-translate preference for conversation \(conversationId): \(autoTranslateEnabled ? "enabled" : "disabled")")
+    }
+    
+    /// Translate all visible unencrypted messages
+    func translateVisibleMessages() async {
+        guard autoTranslateEnabled,
+              let targetLanguage = SettingsService.shared.settings.preferredLanguage,
+              !targetLanguage.isEmpty else {
+            print("⚠️ Auto-translation enabled but no preferred language set")
+            return
+        }
+        
+        isTranslating = true
+        
+        // Get unencrypted messages (messages without encryption or isEncrypted = false)
+        let unencryptedMessages = messages.filter { message in
+            let isEncrypted = message.isEncrypted ?? true // Default to true for backward compatibility
+            return !isEncrypted && !message.text.isEmpty && message.type != .system
+        }
+        
+        print("🌐 Translating \(unencryptedMessages.count) unencrypted messages to \(targetLanguage)")
+        
+        // Translate each message individually (with caching)
+        for message in unencryptedMessages {
+            guard let messageId = message.id else { continue }
+            
+            // Skip if already translated
+            if translatedMessages[messageId] != nil {
+                continue
+            }
+            
+            do {
+                let result = try await translationService.translateMessage(
+                    messageId: messageId,
+                    conversationId: conversationId,
+                    targetLanguage: targetLanguage
+                )
+                
+                translatedMessages[messageId] = result.translatedText
+            } catch {
+                print("❌ Failed to translate message \(messageId): \(error.localizedDescription)")
+            }
+        }
+        
+        isTranslating = false
+    }
+    
+    /// Translate a single new message (called when a new unencrypted message arrives)
+    func translateNewMessage(_ message: Message) async {
+        guard autoTranslateEnabled,
+              let targetLanguage = SettingsService.shared.settings.preferredLanguage,
+              !targetLanguage.isEmpty,
+              let messageId = message.id else {
+            return
+        }
+        
+        // Only translate unencrypted messages
+        let isEncrypted = message.isEncrypted ?? true
+        guard !isEncrypted && !message.text.isEmpty && message.type != .system else {
+            return
+        }
+        
+        // Skip if already translated
+        guard translatedMessages[messageId] == nil else {
+            return
+        }
+        
+        do {
+            let result = try await translationService.translateMessage(
+                messageId: messageId,
+                conversationId: conversationId,
+                targetLanguage: targetLanguage
+            )
+            
+            translatedMessages[messageId] = result.translatedText
+        } catch {
+            print("❌ Failed to translate new message \(messageId): \(error.localizedDescription)")
+        }
     }
 }

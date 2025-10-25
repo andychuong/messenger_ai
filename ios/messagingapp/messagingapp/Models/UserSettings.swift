@@ -22,6 +22,9 @@ struct UserSettings: Codable {
     var animationsEnabled: Bool = true
     var reduceMotion: Bool = false
     
+    // MARK: - Translation
+    var preferredLanguage: String? = nil // User's preferred language for auto-translation
+    
     // MARK: - Notifications (for future use)
     var notificationsEnabled: Bool = true
     var messagePreviewEnabled: Bool = true

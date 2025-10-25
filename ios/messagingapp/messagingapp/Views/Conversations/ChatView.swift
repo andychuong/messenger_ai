@@ -19,6 +19,7 @@ struct ChatView: View {
     @State private var showingGroupInfo = false
     @State private var showingAIAssistant = false
     @State private var previousMessageCount = 0
+    @State private var showingLanguageQuickPicker = false
     @FocusState private var isInputFocused: Bool
     
     // Phase 4.5: Support for both direct and group conversations
@@ -45,6 +46,19 @@ struct ChatView: View {
     
     var body: some View {
         VStack(spacing: 0) {
+            // Group participant header
+            if viewModel.isGroupChat,
+               let participants = viewModel.conversation?.participantDetails,
+               !participants.isEmpty {
+                GroupParticipantHeader(
+                    participants: participants,
+                    currentUserId: viewModel.currentUserId ?? "",
+                    onTap: {
+                        showingGroupInfo = true
+                    }
+                )
+            }
+            
             // Messages list
             messagesList
             
@@ -92,79 +106,12 @@ struct ChatView: View {
         .navigationTitle(viewModel.conversationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            // Custom title with online indicator or group info
             ToolbarItem(placement: .principal) {
-                if viewModel.isGroupChat {
-                    // Group: Show name and member count
-                    Button(action: { showingGroupInfo = true }) {
-                        VStack(spacing: 2) {
-                            Text(viewModel.conversationTitle)
-                                .font(.headline)
-                            Text("\(viewModel.memberCount) members")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                } else {
-                    // Direct chat: Show name with online indicator
-                    HStack(spacing: 6) {
-                        Text(viewModel.conversationTitle)
-                            .font(.headline)
-                        
-                        if viewModel.otherUserStatus == .online {
-                            Circle()
-                                .fill(Color.green)
-                                .frame(width: 8, height: 8)
-                        }
-                    }
-                }
+                navigationTitleView
             }
             
             ToolbarItem(placement: .navigationBarTrailing) {
-                HStack(spacing: 16) {
-                    // AI Assistant button
-                    Button {
-                        showingAIAssistant = true
-                    } label: {
-                        Image(systemName: "sparkles")
-                            .foregroundColor(.purple)
-                    }
-                    
-                    // Group info button for groups
-                    if viewModel.isGroupChat {
-                        Button {
-                            showingGroupInfo = true
-                        } label: {
-                            Image(systemName: "info.circle")
-                        }
-                    }
-                    
-                    // Call buttons (only for direct conversations)
-                    // Phase 11: Disable when offline
-                    if !viewModel.isGroupChat, !viewModel.otherUserId.isEmpty {
-                        // Voice call button
-                        Button {
-                            if networkMonitor.isConnected {
-                                callViewModel.startAudioCall(to: viewModel.otherUserId)
-                            }
-                        } label: {
-                            Image(systemName: "phone.fill")
-                                .foregroundColor(networkMonitor.isConnected ? .primary : .gray)
-                        }
-                        .disabled(!networkMonitor.isConnected)
-                        
-                        // Video call button
-                        Button {
-                            if networkMonitor.isConnected {
-                                callViewModel.startVideoCall(to: viewModel.otherUserId)
-                            }
-                        } label: {
-                            Image(systemName: "video.fill")
-                                .foregroundColor(networkMonitor.isConnected ? .primary : .gray)
-                        }
-                        .disabled(!networkMonitor.isConnected)
-                    }
-                }
+                trailingToolbarButtons
             }
         }
         .sheet(isPresented: $showingGroupInfo) {
@@ -174,6 +121,21 @@ struct ChatView: View {
         }
         .sheet(isPresented: $showingAIAssistant) {
             ConversationAIAssistantView(conversationId: viewModel.conversationId)
+        }
+        .sheet(isPresented: $showingLanguageQuickPicker) {
+            LanguageQuickPickerView(
+                currentLanguage: SettingsService.shared.settings.preferredLanguage,
+                autoTranslateEnabled: viewModel.autoTranslateEnabled,
+                onLanguageSelected: { language in
+                    SettingsService.shared.updatePreferredLanguage(language)
+                    // Enable auto-translation if a language is selected
+                    if language != nil && !viewModel.autoTranslateEnabled {
+                        viewModel.toggleAutoTranslation()
+                    }
+                    showingLanguageQuickPicker = false
+                }
+            )
+            .presentationDetents([.medium, .large])
         }
         .onAppear {
             viewModel.isChatActive = true
@@ -215,7 +177,8 @@ struct ChatView: View {
                 ThreadView(
                     parentMessage: message,
                     conversationId: viewModel.conversationId,
-                    currentUserId: currentUserId
+                    currentUserId: currentUserId,
+                    participantDetails: viewModel.conversation?.participantDetails ?? [:]
                 )
             }
         }
@@ -279,6 +242,7 @@ struct ChatView: View {
                                     message: message,
                                     currentUserId: viewModel.currentUserId ?? "",
                                     isGroupChat: viewModel.isGroupChat,
+                                    participantDetails: viewModel.conversation?.participantDetails ?? [:],
                                     onDelete: {
                                         Task {
                                             await viewModel.deleteMessage(message)
@@ -303,7 +267,9 @@ struct ChatView: View {
                                             // This is a parent message, navigate to its thread
                                             selectedMessageForThread = message
                                         }
-                                    }
+                                    },
+                                    autoTranslateEnabled: viewModel.autoTranslateEnabled,
+                                    translatedText: message.id != nil ? viewModel.translatedMessages[message.id!] : nil
                                 )
                                 .id(message.id)
                             }
@@ -356,6 +322,123 @@ struct ChatView: View {
                 scrollProxy.scrollTo("bottom", anchor: .bottom)
             }
         }
+    }
+    
+    // MARK: - Toolbar Components
+    
+    @ViewBuilder
+    private var navigationTitleView: some View {
+        if viewModel.isGroupChat {
+            Button(action: { showingGroupInfo = true }) {
+                VStack(spacing: 1) {
+                    Text(viewModel.conversationTitle)
+                        .font(.headline)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Text("\(viewModel.memberCount) members")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: 200)
+            }
+        } else {
+            HStack(spacing: 6) {
+                Text(viewModel.conversationTitle)
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                
+                if viewModel.otherUserStatus == .online {
+                    ZStack {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 10, height: 10)
+                        Circle()
+                            .stroke(Color.white, lineWidth: 2)
+                            .frame(width: 10, height: 10)
+                    }
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var trailingToolbarButtons: some View {
+        HStack(spacing: 16) {
+            translationButton
+            aiAssistantButton
+            
+            if viewModel.isGroupChat {
+                groupInfoButton
+            }
+            
+            if !viewModel.isGroupChat && !viewModel.otherUserId.isEmpty {
+                callButtons
+            }
+        }
+    }
+    
+    private var translationButton: some View {
+        Button {
+            viewModel.toggleAutoTranslation()
+            HapticManager.shared.selection()
+        } label: {
+            Image(systemName: "translate")
+                .foregroundColor(viewModel.autoTranslateEnabled ? .blue : .gray)
+                .symbolEffect(.bounce, value: viewModel.autoTranslateEnabled)
+        }
+        .help("Auto-translate messages")
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.5)
+                .onEnded { _ in
+                    HapticManager.shared.medium()
+                    showingLanguageQuickPicker = true
+                }
+        )
+    }
+    
+    private var aiAssistantButton: some View {
+        Button {
+            showingAIAssistant = true
+        } label: {
+            Image(systemName: "sparkles")
+                .foregroundColor(.purple)
+        }
+    }
+    
+    private var groupInfoButton: some View {
+        Button {
+            showingGroupInfo = true
+        } label: {
+            Image(systemName: "info.circle")
+        }
+    }
+    
+    @ViewBuilder
+    private var callButtons: some View {
+        // Voice call button
+        Button {
+            if networkMonitor.isConnected {
+                callViewModel.startAudioCall(to: viewModel.otherUserId)
+            }
+        } label: {
+            Image(systemName: "phone.fill")
+                .foregroundColor(networkMonitor.isConnected ? .primary : .gray)
+        }
+        .disabled(!networkMonitor.isConnected)
+        
+        // Video call button - commented out (function preserved in code)
+        // Uncomment the block below to re-enable video calling
+        /*
+        Button {
+            if networkMonitor.isConnected {
+                callViewModel.startVideoCall(to: viewModel.otherUserId)
+            }
+        } label: {
+            Image(systemName: "video.fill")
+                .foregroundColor(networkMonitor.isConnected ? .primary : .gray)
+        }
+        .disabled(!networkMonitor.isConnected)
+        */
     }
     
     // MARK: - Date Separator

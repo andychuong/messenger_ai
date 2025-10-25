@@ -12,12 +12,14 @@ import Combine
 struct ThreadView: View {
     let parentMessage: Message
     let conversationId: String
+    let participantDetails: [String: ParticipantDetail]
     @StateObject private var viewModel: ThreadViewModel
     @Environment(\.dismiss) private var dismiss
     
-    init(parentMessage: Message, conversationId: String, currentUserId: String) {
+    init(parentMessage: Message, conversationId: String, currentUserId: String, participantDetails: [String: ParticipantDetail] = [:]) {
         self.parentMessage = parentMessage
         self.conversationId = conversationId
+        self.participantDetails = participantDetails
         _viewModel = StateObject(wrappedValue: ThreadViewModel(
             parentMessage: parentMessage,
             conversationId: conversationId,
@@ -47,6 +49,7 @@ struct ThreadView: View {
                                     message: reply,
                                     currentUserId: viewModel.currentUserId,
                                     showThreadIndicators: false,
+                                    participantDetails: participantDetails,
                                     onDelete: {
                                         Task {
                                             await viewModel.deleteReply(reply)
@@ -142,6 +145,7 @@ struct ThreadView: View {
                     message: parentMessage,
                     currentUserId: viewModel.currentUserId,
                     showThreadIndicators: false,
+                    participantDetails: participantDetails,
                     onDelete: {},
                     onReact: { _ in }
                 )

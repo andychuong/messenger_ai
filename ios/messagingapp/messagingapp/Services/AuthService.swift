@@ -153,6 +153,21 @@ class AuthService: ObservableObject {
         await fetchUserData(userId: userId)
     }
     
+    func updatePreferredLanguage(_ language: String?) async throws {
+        guard let userId = currentUser?.id else { return }
+        
+        let updates: [String: Any] = [
+            "preferredLanguage": language as Any
+        ]
+        
+        try await db.collection(User.collectionName)
+            .document(userId)
+            .updateData(updates)
+        
+        await fetchUserData(userId: userId)
+        print("✅ Updated preferred language to: \(language ?? "none")")
+    }
+    
     func resetPassword(email: String) async throws {
         try await auth.sendPasswordReset(withEmail: email)
     }

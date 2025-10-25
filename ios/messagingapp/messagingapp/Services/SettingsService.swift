@@ -19,8 +19,18 @@ class SettingsService: ObservableObject {
     /// User settings
     @Published var settings: UserSettings {
         didSet {
+            let oldValue = Self.loadSettings()
             saveSettings()
             applySettings()
+            
+            // Sync language preference to Firestore if changed
+            if oldValue.preferredLanguage != settings.preferredLanguage {
+                Task {
+                    if let authService = AuthService.shared {
+                        try? await authService.updatePreferredLanguage(settings.preferredLanguage)
+                    }
+                }
+            }
         }
     }
     
@@ -89,6 +99,18 @@ class SettingsService: ObservableObject {
     /// Toggle reduce motion
     func toggleReduceMotion() {
         settings.reduceMotion.toggle()
+    }
+    
+    /// Update preferred language
+    func updatePreferredLanguage(_ language: String?) {
+        settings.preferredLanguage = language
+        
+        // Sync to Firestore
+        Task {
+            if let authService = AuthService.shared {
+                try? await authService.updatePreferredLanguage(language)
+            }
+        }
     }
     
     /// Reset to default settings

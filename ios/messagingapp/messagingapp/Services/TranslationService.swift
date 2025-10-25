@@ -206,6 +206,7 @@ struct Language: Identifiable, Hashable {
     let emoji: String
     
     static let common: [Language] = [
+        Language(name: "English", nativeName: "English", emoji: "🇺🇸"),
         Language(name: "Spanish", nativeName: "Español", emoji: "🇪🇸"),
         Language(name: "French", nativeName: "Français", emoji: "🇫🇷"),
         Language(name: "German", nativeName: "Deutsch", emoji: "🇩🇪"),

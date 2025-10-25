@@ -17,6 +17,7 @@ struct User: Identifiable, Codable {
     var lastSeen: Date
     var status: UserStatus
     var createdAt: Date
+    var preferredLanguage: String? // User's preferred language for translations
     
     enum UserStatus: String, Codable {
         case online
@@ -28,7 +29,7 @@ struct User: Identifiable, Codable {
     static let collectionName = "users"
     
     // Initialize new user
-    init(id: String? = nil, email: String, displayName: String, photoURL: String? = nil) {
+    init(id: String? = nil, email: String, displayName: String, photoURL: String? = nil, preferredLanguage: String? = nil) {
         self.id = id
         self.email = email
         self.displayName = displayName
@@ -37,6 +38,7 @@ struct User: Identifiable, Codable {
         self.lastSeen = Date()
         self.status = .online
         self.createdAt = Date()
+        self.preferredLanguage = preferredLanguage
     }
     
     // Convert to dictionary for Firestore
@@ -48,7 +50,8 @@ struct User: Identifiable, Codable {
             "fcmToken": fcmToken as Any,
             "lastSeen": Timestamp(date: lastSeen),
             "status": status.rawValue,
-            "createdAt": Timestamp(date: createdAt)
+            "createdAt": Timestamp(date: createdAt),
+            "preferredLanguage": preferredLanguage as Any
         ]
     }
 }

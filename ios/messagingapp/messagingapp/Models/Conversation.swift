@@ -90,9 +90,18 @@ extension Conversation {
             if let groupName = groupName, !groupName.isEmpty {
                 return groupName
             }
-            // Fallback: show all participant names
-            let names = participantDetails.values.map { $0.name }
-            return names.joined(separator: ", ")
+            // Fallback: show limited participant names
+            let otherParticipants = participantDetails.filter { $0.key != currentUserId }
+            let names = otherParticipants.values.map { $0.name }.sorted()
+            
+            if names.count <= 2 {
+                return names.joined(separator: ", ")
+            } else {
+                // Show first 2 names and count of others
+                let firstTwo = names.prefix(2).joined(separator: ", ")
+                let remaining = names.count - 2
+                return "\(firstTwo) +\(remaining)"
+            }
         } else {
             // For direct chats, show other person's name
             return otherParticipantDetails(currentUserId: currentUserId)?.name ?? "Unknown"

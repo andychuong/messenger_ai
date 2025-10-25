@@ -150,15 +150,26 @@ struct ProfileView: View {
             // User info section
             Section {
                 HStack(spacing: 16) {
-                    Circle()
-                        .fill(.blue.gradient)
-                        .frame(width: 60, height: 60)
-                        .overlay {
-                            Text(authService.currentUser?.displayName.prefix(1).uppercased() ?? "?")
-                                .font(.title)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(.white)
+                    // Profile photo or initial
+                    if let photoURL = authService.currentUser?.photoURL,
+                       let url = URL(string: photoURL) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 60, height: 60)
+                                    .clipShape(Circle())
+                            case .failure(_), .empty:
+                                profileInitial
+                            @unknown default:
+                                profileInitial
+                            }
                         }
+                    } else {
+                        profileInitial
+                    }
                     
                     VStack(alignment: .leading, spacing: 4) {
                         Text(authService.currentUser?.displayName ?? "User")
@@ -181,7 +192,7 @@ struct ProfileView: View {
                 }
                 
                 NavigationLink {
-                    Text("Edit Profile - Coming Soon")
+                    EditProfileView()
                 } label: {
                     Label("Edit Profile", systemImage: "person.crop.circle")
                 }
@@ -219,6 +230,18 @@ struct ProfileView: View {
         } message: {
             Text("Are you sure you want to logout?")
         }
+    }
+    
+    private var profileInitial: some View {
+        Circle()
+            .fill(.blue.gradient)
+            .frame(width: 60, height: 60)
+            .overlay {
+                Text(authService.currentUser?.displayName.prefix(1).uppercased() ?? "?")
+                    .font(.title)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.white)
+            }
     }
 }
 

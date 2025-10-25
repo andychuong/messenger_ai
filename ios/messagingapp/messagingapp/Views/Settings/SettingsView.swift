@@ -18,6 +18,9 @@ struct SettingsView: View {
             // Appearance Section
             appearanceSection
             
+            // Translation Section
+            translationSection
+            
             // Feedback Section
             feedbackSection
             
@@ -65,6 +68,32 @@ struct SettingsView: View {
             Text("Appearance")
         } footer: {
             Text("Choose how the app looks. System follows your device's appearance setting.")
+        }
+    }
+    
+    // MARK: - Translation Section
+    
+    private var translationSection: some View {
+        Section {
+            NavigationLink {
+                LanguageSelectionView(selectedLanguage: $settingsService.settings.preferredLanguage)
+            } label: {
+                HStack {
+                    Label("Preferred Language", systemImage: "globe")
+                    Spacer()
+                    if let languageName = settingsService.settings.preferredLanguage {
+                        Text(languageName)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text("None")
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+        } header: {
+            Text("Translation")
+        } footer: {
+            Text("Set your preferred language for auto-translation of messages. You can enable auto-translation per conversation in the chat view.")
         }
     }
     

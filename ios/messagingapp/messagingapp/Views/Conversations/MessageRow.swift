@@ -5,16 +5,22 @@ struct MessageRow: View {
     let currentUserId: String
     var isGroupChat: Bool = false
     var showThreadIndicators: Bool = true
+    var participantDetails: [String: ParticipantDetail] = [:]
     let onDelete: () -> Void
     let onReact: (String) -> Void
     var onEdit: (() -> Void)? = nil
     var onReplyInThread: (() -> Void)? = nil
+    
+    // Auto-translation support
+    var autoTranslateEnabled: Bool = false
+    var translatedText: String? = nil
     
     @State private var showingActionMenu = false
     @State private var showingEmojiPicker = false
     @State private var showingTranslationMenu = false
     @State private var showingTranslation = false
     @State private var showingTranslationError = false
+    @State private var showingOriginal = false // Toggle between original and translated
     @StateObject private var voiceService = VoiceRecordingService()
     @StateObject private var translationViewModel = TranslationViewModel()
     
@@ -32,6 +38,14 @@ struct MessageRow: View {
     
     private var translationErrorMessage: String {
         translationViewModel.translationError ?? "An error occurred"
+    }
+    
+    // Determine which text to display based on auto-translation state
+    private var displayedText: String {
+        if autoTranslateEnabled && !showingOriginal, let translated = translatedText {
+            return translated
+        }
+        return message.text
     }
     
     var body: some View {
@@ -180,12 +194,28 @@ struct MessageRow: View {
     
     private var messageBubble: some View {
         VStack(alignment: isSentByMe ? .trailing : .leading, spacing: 4) {
-            if isGroupChat || !isSentByMe {
-                Text(message.senderName ?? "Unknown")
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundColor(isSentByMe ? .blue : .gray)
-                    .padding(.leading, 12)
+            if isGroupChat && !isSentByMe {
+                HStack(spacing: 6) {
+                    // Small avatar circle
+                    let senderName = message.senderName ?? "Unknown"
+                    let senderColor = ColorGenerator.color(for: message.senderId)
+                    let initials = ColorGenerator.initials(from: senderName)
+                    
+                    Circle()
+                        .fill(senderColor)
+                        .frame(width: 18, height: 18)
+                        .overlay(
+                            Text(initials)
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(.white)
+                        )
+                    
+                    Text(senderName)
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(senderColor)
+                }
+                .padding(.leading, 12)
             }
             
             // Image message
@@ -198,15 +228,40 @@ struct MessageRow: View {
             }
             // Text message
             else if !message.text.isEmpty {
-                Text(message.text)
-                    .font(.body)
-                    .foregroundColor(isSentByMe ? .white : .primary)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(
-                        isSentByMe ? Color.blue : Color(.systemGray5)
-                    )
-                    .cornerRadius(20)
+                VStack(alignment: isSentByMe ? .trailing : .leading, spacing: 4) {
+                    // Display translated or original text
+                    Text(displayedText)
+                        .font(.body)
+                        .foregroundColor(isSentByMe ? .white : .primary)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(
+                            isSentByMe ? Color.blue : Color(.systemGray5)
+                        )
+                        .cornerRadius(20)
+                    
+                    // Translation indicator
+                    if autoTranslateEnabled && translatedText != nil {
+                        HStack(spacing: 4) {
+                            Image(systemName: "translate")
+                                .font(.caption2)
+                            Text(showingOriginal ? "Original" : "Translated")
+                                .font(.caption2)
+                            
+                            // Toggle button
+                            Button {
+                                showingOriginal.toggle()
+                                HapticManager.shared.selection()
+                            } label: {
+                                Text(showingOriginal ? "Show Translation" : "Show Original")
+                                    .font(.caption2)
+                                    .foregroundColor(.blue)
+                            }
+                        }
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 12)
+                    }
+                }
             }
             
             // Edited indicator
@@ -223,36 +278,13 @@ struct MessageRow: View {
     @ViewBuilder
     private func imageMessageView(url: String, caption: String) -> some View {
         VStack(alignment: isSentByMe ? .trailing : .leading, spacing: 4) {
-            // Image
-            AsyncImage(url: URL(string: url)) { phase in
-                switch phase {
-                case .empty:
-                    ProgressView()
-                        .frame(width: 200, height: 200)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(12)
-                case .success(let image):
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(maxWidth: 250, maxHeight: 300)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                case .failure:
-                    VStack {
-                        Image(systemName: "photo")
-                            .font(.largeTitle)
-                            .foregroundColor(.gray)
-                        Text("Failed to load image")
-                            .font(.caption)
-                            .foregroundColor(.gray)
-                    }
-                    .frame(width: 200, height: 200)
-                    .background(Color(.systemGray6))
-                    .cornerRadius(12)
-                @unknown default:
-                    EmptyView()
-                }
-            }
+            // Encrypted Image
+            EncryptedImageView(
+                url: url,
+                conversationId: message.conversationId,
+                maxWidth: 250,
+                maxHeight: 300
+            )
             
             // Caption (if exists)
             if !caption.isEmpty {
@@ -379,22 +411,11 @@ struct MessageRow: View {
     private var reactionsView: some View {
         HStack(spacing: 4) {
             if let reactions = message.reactions {
-                ForEach(Array(reactions.values).uniqued(), id: \.self) { emoji in
-                    let count = reactions.values.filter { $0 == emoji }.count
-                    HStack(spacing: 2) {
-                        Text(emoji)
-                            .font(.caption)
-                        if count > 1 {
-                            Text("\(count)")
-                                .font(.caption2)
-                                .foregroundColor(.gray)
-                        }
-                    }
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color(.systemGray6))
-                    .cornerRadius(10)
-                }
+                MessageReactionsView(
+                    reactions: reactions,
+                    currentUserId: currentUserId,
+                    onReact: onReact
+                )
             }
         }
         .padding(.horizontal, 12)
@@ -415,9 +436,11 @@ struct MessageRow: View {
                 .foregroundColor(.gray)
             
             if isSentByMe {
-                if isGroupChat && message.status == .read {
+                if isGroupChat {
+                    // Group chat: show read receipts with viewer circles
                     readCountIndicator
                 } else {
+                    // Direct chat: show standard status indicator
                     statusIndicator
                 }
             }
@@ -428,11 +451,17 @@ struct MessageRow: View {
     private var readCountIndicator: some View {
         Group {
             if let readBy = message.readBy, !readBy.isEmpty {
-                Text("Read by \(readBy.count)")
-                    .font(.caption2)
-                    .foregroundColor(.blue)
+                MessageReadReceipt(
+                    readBy: readBy,
+                    participantDetails: participantDetails,
+                    totalParticipants: participantDetails.count,
+                    currentUserId: currentUserId
+                )
             } else {
-                statusIndicator
+                // Show gray checkmark when sent but no one has read yet
+                Image(systemName: "checkmark")
+                    .font(.system(size: 10))
+                    .foregroundColor(.gray)
             }
         }
     }

@@ -27,7 +27,7 @@ struct Message: Identifiable, Codable, Hashable {
     var originalText: String?
     var replyTo: String?  // messageId for threading
     var threadCount: Int?  // Number of replies in thread
-    var reactions: [String: String]?  // userId -> emoji
+    var reactions: [String: [String]]?  // emoji -> array of user IDs
     var translations: [String: String]?  // languageCode -> translatedText
     
     // Read receipts
