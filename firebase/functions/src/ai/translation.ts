@@ -14,6 +14,34 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+/**
+ * Extract emojis from text
+ * Returns object with text without emojis and the extracted emojis
+ */
+function extractEmojis(text: string): { textWithoutEmojis: string; emojis: string[] } {
+  // Regex to match emojis (covers most common emoji ranges)
+  const emojiRegex = /[\u{1F300}-\u{1F9FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F1E0}-\u{1F1FF}\u{1FA70}-\u{1FAFF}]/gu;
+  
+  const emojis: string[] = [];
+  const textWithoutEmojis = text.replace(emojiRegex, (match) => {
+    emojis.push(match);
+    return "";
+  }).trim();
+  
+  return { textWithoutEmojis, emojis };
+}
+
+/**
+ * Add emojis back to translated text
+ */
+function addEmojisToText(text: string, emojis: string[]): string {
+  if (emojis.length === 0) {
+    return text;
+  }
+  // Add emojis at the end with a space
+  return `${text} ${emojis.join("")}`;
+}
+
 interface TranslationRequest {
   messageId: string;
   conversationId: string;
@@ -91,29 +119,38 @@ export const translateMessage = functions.https.onCall(async (data: TranslationR
       };
     }
     
-    // Translate using GPT-4o
+    // Extract emojis from text before translation
+    const { textWithoutEmojis, emojis } = extractEmojis(originalText);
+    
+    // Translate using GPT-4o (without emojis)
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
         {
           role: "system",
           content: `You are a professional translator. Translate the following message to ${targetLanguage}. 
-Maintain the tone, style, and any emojis. Only return the translated text, nothing else.`,
+Maintain the tone and style. Only return the translated text, nothing else. Do not include any emojis in your response.`,
         },
         {
           role: "user",
-          content: originalText,
+          content: textWithoutEmojis,
         },
       ],
       temperature: 0.3,
       max_tokens: 1000,
     });
     
-    const translatedText = completion.choices[0]?.message?.content?.trim();
+    let translatedText = completion.choices[0]?.message?.content?.trim();
     
     if (!translatedText) {
       throw new functions.https.HttpsError("internal", "Translation failed");
     }
+    
+    // Remove any emojis that GPT might have added (we only want the original ones)
+    const cleanedTranslation = extractEmojis(translatedText).textWithoutEmojis;
+    
+    // Add back ONLY the original emojis from the source text
+    translatedText = addEmojisToText(cleanedTranslation, emojis);
     
     // Cache the translation
     await messageRef.update({
@@ -162,29 +199,38 @@ export const translateText = functions.https.onCall(async (data: { text: string;
   try {
     console.log(`Translating text to ${targetLanguage}`);
     
-    // Translate using GPT-4o
+    // Extract emojis from text before translation
+    const { textWithoutEmojis, emojis } = extractEmojis(text);
+    
+    // Translate using GPT-4o (without emojis)
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
         {
           role: "system",
           content: `You are a professional translator. Translate the following message to ${targetLanguage}. 
-Maintain the tone, style, and any emojis. Only return the translated text, nothing else.`,
+Maintain the tone and style. Only return the translated text, nothing else. Do not include any emojis in your response.`,
         },
         {
           role: "user",
-          content: text,
+          content: textWithoutEmojis,
         },
       ],
       temperature: 0.3,
       max_tokens: 1000,
     });
     
-    const translatedText = completion.choices[0]?.message?.content?.trim();
+    let translatedText = completion.choices[0]?.message?.content?.trim();
     
     if (!translatedText) {
       throw new functions.https.HttpsError("internal", "Translation failed");
     }
+    
+    // Remove any emojis that GPT might have added (we only want the original ones)
+    const cleanedTranslation = extractEmojis(translatedText).textWithoutEmojis;
+    
+    // Add back ONLY the original emojis from the source text
+    translatedText = addEmojisToText(cleanedTranslation, emojis);
     
     console.log(`Successfully translated text to ${targetLanguage}`);
     

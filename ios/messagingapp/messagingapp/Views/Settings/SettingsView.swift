@@ -24,6 +24,9 @@ struct SettingsView: View {
             // Phase 15: Enhanced Translation Features
             enhancedTranslationSection
             
+            // Phase 16: Smart Replies & Suggestions
+            smartRepliesSection
+            
             // Feedback Section
             feedbackSection
             
@@ -211,6 +214,87 @@ struct SettingsView: View {
             Text("Animations")
         } footer: {
             Text("Control animation behavior. Reduce Motion limits motion effects for better accessibility.")
+        }
+    }
+    
+    // MARK: - Phase 16: Smart Replies Section
+    
+    private var smartRepliesSection: some View {
+        Section {
+            Toggle(isOn: Binding(
+                get: { SmartReplyService.shared.getSettings().enabled },
+                set: { newValue in
+                    var settings = SmartReplyService.shared.getSettings()
+                    settings.enabled = newValue
+                    SmartReplyService.shared.updateSettings(settings)
+                    HapticManager.shared.selection()
+                }
+            )) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("Smart Replies", systemImage: "sparkles")
+                    Text("AI-generated quick reply suggestions")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            Toggle(isOn: Binding(
+                get: { SmartReplyService.shared.getSettings().autoGenerateOnNewMessage },
+                set: { newValue in
+                    var settings = SmartReplyService.shared.getSettings()
+                    settings.autoGenerateOnNewMessage = newValue
+                    SmartReplyService.shared.updateSettings(settings)
+                    HapticManager.shared.selection()
+                }
+            )) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("Auto-Generate", systemImage: "arrow.triangle.2.circlepath")
+                    Text("Automatically generate replies when receiving messages")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .disabled(!SmartReplyService.shared.getSettings().enabled)
+            
+            Picker("Default Tone", selection: Binding(
+                get: { SmartReplyService.shared.getSettings().defaultTone },
+                set: { newValue in
+                    var settings = SmartReplyService.shared.getSettings()
+                    settings.defaultTone = newValue
+                    SmartReplyService.shared.updateSettings(settings)
+                    HapticManager.shared.selection()
+                }
+            )) {
+                ForEach(ReplyTone.allCases, id: \.self) { tone in
+                    HStack {
+                        Text(tone.icon)
+                        Text(tone.displayName)
+                    }
+                    .tag(tone)
+                }
+            }
+            .disabled(!SmartReplyService.shared.getSettings().enabled)
+            
+            Picker("Number of Suggestions", selection: Binding(
+                get: { SmartReplyService.shared.getSettings().numberOfSuggestions },
+                set: { newValue in
+                    var settings = SmartReplyService.shared.getSettings()
+                    settings.numberOfSuggestions = newValue
+                    SmartReplyService.shared.updateSettings(settings)
+                    HapticManager.shared.selection()
+                }
+            )) {
+                ForEach([3, 4, 5], id: \.self) { count in
+                    Text("\(count) replies")
+                        .tag(count)
+                }
+            }
+            .disabled(!SmartReplyService.shared.getSettings().enabled)
+            
+        } header: {
+            Text("Smart Replies & Suggestions")
+        } footer: {
+            Text("AI-powered features that suggest contextually appropriate replies and completions for your messages. Requires an active internet connection.")
         }
     }
     

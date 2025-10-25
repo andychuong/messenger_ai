@@ -37,6 +37,9 @@ export * from "./ai/priority";
 export * from "./ai/culturalContext"; // Cultural context hints
 export * from "./ai/formalityAdjustment"; // Formality level adjustments
 export * from "./ai/slangExplanation"; // Slang and idiom explanations
+// Phase 16: Smart Replies & Suggestions
+export * from "./ai/smartReplies"; // Context-aware smart replies
+export * from "./ai/smartCompose"; // Type-ahead suggestions
 
 /**
  * Health check function

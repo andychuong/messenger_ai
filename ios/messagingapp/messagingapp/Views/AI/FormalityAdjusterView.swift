@@ -26,7 +26,7 @@ struct FormalityAdjusterView: View {
     ]
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             VStack(spacing: 0) {
                 // Original message
                 originalMessageSection
@@ -67,6 +67,8 @@ struct FormalityAdjusterView: View {
                 }
             }
         }
+        .presentationDragIndicator(.visible)
+        .presentationDetents([.large])
         .task {
             // Detect current formality
             await viewModel.detectFormality(text: messageText, language: language)

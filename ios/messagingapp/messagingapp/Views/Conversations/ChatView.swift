@@ -78,6 +78,24 @@ struct ChatView: View {
                     .animation(.spring(response: 0.3, dampingFraction: 0.7), value: typingText)
             }
             
+            // Phase 16: Smart Replies (positioned above input bar)
+            if viewModel.shouldShowSmartReplies() {
+                SmartRepliesView(
+                    smartReplies: viewModel.smartReplies,
+                    onSelectReply: { reply in
+                        viewModel.sendSmartReply(reply)
+                    },
+                    onRegenerate: {
+                        Task {
+                            await viewModel.generateSmartReplies()
+                        }
+                    },
+                    isGenerating: viewModel.isGeneratingReplies
+                )
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: viewModel.showSmartReplies)
+            }
+            
             // Input bar with encryption toggle and formality adjustment
             VStack(spacing: 0) {
                 // Edit mode indicator
@@ -153,26 +171,59 @@ struct ChatView: View {
                         .disabled(viewModel.isSending)
                     }
                     
-                    // Text input with microphone button
+                    // Text input with microphone button and smart compose
                     HStack(spacing: 8) {
-                        TextField(
-                            viewModel.isEditingMessage ? "Edit message" : (viewModel.nextMessageEncrypted ? "Encrypted message" : "AI-enhanced message"),
-                            text: $viewModel.messageText,
-                            axis: .vertical
-                        )
-                        .textFieldStyle(.plain)
-                        .padding(.leading, 12)
-                        .padding(.vertical, 8)
-                        .lineLimit(1...5)
-                        .focused($isInputFocused)
-                        .disabled(viewModel.isSending)
-                        .onSubmit {
-                            if !viewModel.messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                Task {
-                                    await viewModel.sendMessage()
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                                        isInputFocused = true
+                        ZStack(alignment: .leading) {
+                            // Smart Compose suggestion (gray text)
+                            if !viewModel.smartComposeSuggestion.isEmpty && !viewModel.isEditingMessage {
+                                Text(viewModel.messageText + viewModel.smartComposeSuggestion)
+                                    .foregroundColor(.gray.opacity(0.5))
+                                    .padding(.leading, 12)
+                                    .padding(.vertical, 8)
+                                    .lineLimit(1...5)
+                            }
+                            
+                            // Actual text field
+                            TextField(
+                                viewModel.isEditingMessage ? "Edit message" : (viewModel.nextMessageEncrypted ? "Encrypted message" : "AI-enhanced message"),
+                                text: $viewModel.messageText,
+                                axis: .vertical
+                            )
+                            .textFieldStyle(.plain)
+                            .padding(.leading, 12)
+                            .padding(.vertical, 8)
+                            .lineLimit(1...5)
+                            .focused($isInputFocused)
+                            .disabled(viewModel.isSending)
+                            .onSubmit {
+                                if !viewModel.messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    Task {
+                                        await viewModel.sendMessage()
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                                            isInputFocused = true
+                                        }
                                     }
+                                }
+                            }
+                            .onChange(of: viewModel.messageText) { oldValue, newValue in
+                                // Phase 16: Trigger smart compose
+                                if SmartReplyService.shared.getSettings().enabled && !viewModel.isEditingMessage {
+                                    viewModel.generateSmartCompose(partialText: newValue)
+                                }
+                            }
+                            
+                            // Smart compose accept button (Tab key alternative)
+                            if !viewModel.smartComposeSuggestion.isEmpty {
+                                HStack {
+                                    Spacer()
+                                    Button {
+                                        viewModel.acceptSmartCompose()
+                                    } label: {
+                                        Image(systemName: "arrow.forward.circle.fill")
+                                            .font(.title3)
+                                            .foregroundColor(.blue)
+                                    }
+                                    .padding(.trailing, 8)
                                 }
                             }
                         }

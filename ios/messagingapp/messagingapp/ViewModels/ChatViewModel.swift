@@ -39,6 +39,15 @@ class ChatViewModel: ObservableObject {
     @Published var translatedMessages: [String: String] = [:] // messageId -> translatedText
     @Published var isTranslating = false
     
+    // Phase 16: Smart Replies & Suggestions
+    @Published var smartReplies: [SmartReply] = []
+    @Published var isGeneratingReplies = false
+    @Published var showSmartReplies = false
+    @Published var smartComposeCompletion: String = ""
+    @Published var smartComposeSuggestion: String = ""
+    private let smartReplyService = SmartReplyService.shared
+    private var smartComposeTask: Task<Void, Never>?
+    
     let voiceService = VoiceRecordingService()
     private var typingIndicator = TypingIndicatorService()
     private var typingCancellable: AnyCancellable?
@@ -158,6 +167,15 @@ class ChatViewModel: ObservableObject {
                 // Mark as read if chat is active and new messages arrived
                 if self.isChatActive {
                     await self.markAllMessagesAsRead()
+                }
+                
+                // Phase 16: Generate smart replies for new messages from others
+                if !newMessages.isEmpty && self.smartReplyService.shouldGenerateReplies(for: self.conversationId) {
+                    // Only generate if the last message is from someone else
+                    if let lastMessage = newMessages.last,
+                       lastMessage.senderId != currentUserId {
+                        await self.generateSmartReplies()
+                    }
                 }
             }
         }
@@ -716,5 +734,120 @@ class ChatViewModel: ObservableObject {
         } catch {
             print("❌ Failed to translate new message \(messageId): \(error.localizedDescription)")
         }
+    }
+    
+    // MARK: - Phase 16: Smart Replies
+    
+    /// Generate smart reply suggestions based on recent conversation
+    func generateSmartReplies() async {
+        guard !isGeneratingReplies else { return }
+        
+        isGeneratingReplies = true
+        showSmartReplies = true
+        
+        do {
+            let replies = try await smartReplyService.generateSmartReplies(
+                conversationId: conversationId,
+                recentMessages: Array(messages.suffix(10))
+            )
+            
+            // Take only the requested number of suggestions from settings
+            let settings = smartReplyService.getSettings()
+            smartReplies = Array(replies.prefix(settings.numberOfSuggestions))
+            
+            print("✨ Generated \(smartReplies.count) smart replies")
+        } catch {
+            print("❌ Failed to generate smart replies: \(error.localizedDescription)")
+            smartReplies = []
+        }
+        
+        isGeneratingReplies = false
+    }
+    
+    /// Send a smart reply
+    func sendSmartReply(_ reply: SmartReply) {
+        messageText = reply.text
+        Task {
+            await sendMessage()
+            // Clear smart replies after sending
+            clearSmartReplies()
+        }
+    }
+    
+    /// Clear smart replies
+    func clearSmartReplies() {
+        smartReplies = []
+        showSmartReplies = false
+        smartReplyService.clearCache(for: conversationId)
+    }
+    
+    /// Check if smart replies should be shown
+    func shouldShowSmartReplies() -> Bool {
+        let settings = smartReplyService.getSettings()
+        return settings.enabled && showSmartReplies && !smartReplies.isEmpty
+    }
+    
+    // MARK: - Phase 16: Smart Compose
+    
+    /// Generate type-ahead completion for partially typed text
+    func generateSmartCompose(partialText: String) {
+        // Cancel any existing task
+        smartComposeTask?.cancel()
+        
+        // Don't suggest for very short text
+        let words = partialText.trimmingCharacters(in: .whitespaces).split(separator: " ")
+        guard words.count >= 3 else {
+            smartComposeSuggestion = ""
+            return
+        }
+        
+        smartComposeTask = Task {
+            // Debounce: wait 500ms before generating
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard !Task.isCancelled else { return }
+            
+            do {
+                // Build context from recent messages
+                let recentContext = Array(messages.suffix(5)).map { message in
+                    let sender = message.senderId == currentUserId ? "You" : (message.senderName ?? "Other")
+                    return "\(sender): \(message.text)"
+                }
+                
+                let settings = smartReplyService.getSettings()
+                let response = try await smartReplyService.generateCompletion(
+                    partialText: partialText,
+                    conversationContext: recentContext,
+                    tone: settings.defaultTone
+                )
+                
+                guard !Task.isCancelled, response.success else { return }
+                
+                await MainActor.run {
+                    // Only show if confidence is high enough and text hasn't changed
+                    if response.confidence >= 0.6 && messageText.hasPrefix(partialText) {
+                        smartComposeSuggestion = response.completion
+                    } else {
+                        smartComposeSuggestion = ""
+                    }
+                }
+            } catch {
+                print("❌ Failed to generate smart compose: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    /// Accept smart compose suggestion
+    func acceptSmartCompose() {
+        if !smartComposeSuggestion.isEmpty {
+            messageText += smartComposeSuggestion
+            smartComposeSuggestion = ""
+            HapticManager.shared.light()
+        }
+    }
+    
+    /// Clear smart compose suggestion
+    func clearSmartCompose() {
+        smartComposeSuggestion = ""
+        smartComposeTask?.cancel()
     }
 }
