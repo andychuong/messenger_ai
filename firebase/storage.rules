@@ -25,6 +25,41 @@ service firebase.storage {
       return request.resource.contentType.matches('audio/.*');
     }
     
+    // Phase 19: Helper function to check if file is a document/attachment
+    function isDocument() {
+      return request.resource.contentType.matches('application/.*') ||
+             request.resource.contentType.matches('text/.*');
+    }
+    
+    // Phase 19: Helper function for allowed file types
+    function isAllowedFileType() {
+      return request.resource.contentType in [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.ms-powerpoint',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'application/vnd.apple.pages',
+        'application/vnd.apple.numbers',
+        'application/vnd.apple.keynote',
+        'text/plain',
+        'text/rtf',
+        'text/markdown',
+        'text/csv',
+        'application/json',
+        'application/xml',
+        'text/xml',
+        'application/zip',
+        'application/x-rar-compressed',
+        'application/x-7z-compressed',
+        'text/javascript',
+        'application/javascript',
+        'application/octet-stream' // For encrypted files
+      ];
+    }
+    
     // Profile pictures
     match /users/{userId}/profile/{fileName} {
       // Anyone can read profile pictures
@@ -65,6 +100,25 @@ service firebase.storage {
       allow write: if isSignedIn() && 
         isImage() && 
         fileSizeUnder(5);
+    }
+    
+    // Phase 19: File attachments (documents, archives, etc.)
+    match /conversations/{conversationId}/files/{category}/{fileName} {
+      // Can read if authenticated (files may be encrypted)
+      allow read: if isSignedIn();
+      
+      // Can upload files if authenticated and file type is allowed
+      allow write: if isSignedIn() && 
+        isAllowedFileType() &&
+        fileSizeUnder(10); // Max 10MB for free tier (TODO: Premium users get 100MB)
+    }
+    
+    // Phase 19: File thumbnails
+    match /conversations/{conversationId}/files/thumbnails/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && 
+        isImage() &&
+        fileSizeUnder(1); // Thumbnails max 1MB
     }
     
     // Default deny

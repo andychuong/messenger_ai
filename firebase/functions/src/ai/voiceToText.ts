@@ -17,10 +17,20 @@ interface TranscriptionRequest {
   messageId: string;
   conversationId: string;
   audioUrl: string;
+  translateTo?: string[]; // Phase 19.2: Optional array of language codes to translate to
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+interface TranscriptionResponse {
+  transcript: string;
+  detectedLanguage?: string;
+  translations?: Record<string, string>; // languageCode -> translated text
+  fromCache: boolean;
 }
 
 /**
  * Transcribe voice message using Whisper API
+ * Phase 19.2: Enhanced with language detection and translation
  */
 export const transcribeVoiceMessage = functions.https.onCall(
   async (data: TranscriptionRequest, context) => {
@@ -28,7 +38,7 @@ export const transcribeVoiceMessage = functions.https.onCall(
       throw new functions.https.HttpsError("unauthenticated", "Authentication required");
     }
     
-    const { messageId, conversationId, audioUrl } = data;
+    const { messageId, conversationId, audioUrl, translateTo } = data;
     
     try {
       // Get the message
@@ -45,11 +55,40 @@ export const transcribeVoiceMessage = functions.https.onCall(
       }
       
       // Check if already transcribed
-      const existingTranscript = messageSnap.data()?.voiceTranscript;
+      const messageData = messageSnap.data();
+      const existingTranscript = messageData?.voiceTranscript;
+      const existingTranslations = messageData?.voiceTranslations || {};
+      const existingLanguage = messageData?.detectedLanguage;
+      
       if (existingTranscript) {
         console.log("Returning cached transcript");
+        
+        // Check if we need new translations
+        const translations: Record<string, string> = { ...existingTranslations };
+        let needsNewTranslation = false;
+        
+        if (translateTo && translateTo.length > 0) {
+          for (const targetLang of translateTo) {
+            if (!translations[targetLang]) {
+              needsNewTranslation = true;
+              // Translate the existing transcript
+              const translated = await translateText(existingTranscript, targetLang);
+              translations[targetLang] = translated;
+            }
+          }
+          
+          // Update message with new translations if any
+          if (needsNewTranslation) {
+            await messageRef.update({
+              voiceTranslations: translations,
+            });
+          }
+        }
+        
         return {
           transcript: existingTranscript,
+          detectedLanguage: existingLanguage,
+          translations,
           fromCache: true,
         };
       }
@@ -66,26 +105,46 @@ export const transcribeVoiceMessage = functions.https.onCall(
         type: "audio/m4a",
       });
       
-      // Transcribe using Whisper
+      // Phase 19.2: Transcribe using Whisper with language detection
+      // First, transcribe without language constraint to auto-detect
       const transcription = await openai.audio.transcriptions.create({
         file: audioFile,
         model: "whisper-1",
-        language: "en", // TODO: Auto-detect language
-        response_format: "json",
+        // Remove language parameter to auto-detect
+        response_format: "verbose_json", // Get language info
       });
       
       const transcript = transcription.text;
+      const detectedLanguage = transcription.language || "unknown";
       
-      // Save transcript to message
+      console.log(`Detected language: ${detectedLanguage}`);
+      
+      // Phase 19.2: Generate translations if requested
+      const translations: Record<string, string> = {};
+      if (translateTo && translateTo.length > 0) {
+        for (const targetLang of translateTo) {
+          // Don't translate to the same language
+          if (targetLang !== detectedLanguage) {
+            const translated = await translateText(transcript, targetLang);
+            translations[targetLang] = translated;
+          }
+        }
+      }
+      
+      // Save transcript, detected language, and translations to message
       await messageRef.update({
         voiceTranscript: transcript,
+        detectedLanguage,
+        voiceTranslations: translations,
         transcribedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
       
-      console.log(`Transcribed voice message ${messageId}`);
+      console.log(`Transcribed voice message ${messageId} (${detectedLanguage})`);
       
       return {
         transcript,
+        detectedLanguage,
+        translations,
         fromCache: false,
       };
     } catch (error) {
@@ -94,6 +153,35 @@ export const transcribeVoiceMessage = functions.https.onCall(
     }
   }
 );
+
+/**
+ * Phase 19.2: Helper function to translate text using GPT-4o
+ */
+async function translateText(text: string, targetLanguage: string): Promise<string> {
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "system",
+          content: `You are a professional translator. Translate the following text to ${targetLanguage}. 
+Preserve the meaning, tone, and context. Return only the translated text without any explanations.`,
+        },
+        {
+          role: "user",
+          content: text,
+        },
+      ],
+      temperature: 0.3,
+    });
+
+    return response.choices[0]?.message?.content?.trim() || text;
+  } catch (error) {
+    console.error(`Translation error for language ${targetLanguage}:`, error);
+    // Return original text if translation fails
+    return text;
+  }
+}
 
 /**
  * Auto-transcribe voice messages (triggered by onCreate)

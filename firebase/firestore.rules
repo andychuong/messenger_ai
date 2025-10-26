@@ -125,15 +125,15 @@ service cloud.firestore {
         // - Messages are encrypted client-side before storage
         // - Text field contains encrypted data (base64 encoded)
         // - Validates required fields and data types
-        // - Allows empty text for media messages (images, voice, video)
+        // - Allows empty text for media messages (images, voice, video, files)
         allow create: if isSignedIn() && 
           isParticipant(get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants) &&
           (request.auth.uid == request.resource.data.senderId || 
            request.resource.data.senderId == "system") &&
           request.resource.data.text is string &&
-          // Text can be empty for media messages
+          // Text can be empty for media messages and file attachments
           (request.resource.data.text.size() > 0 || 
-           request.resource.data.keys().hasAny(['mediaURL', 'mediaType'])) &&
+           request.resource.data.keys().hasAny(['mediaURL', 'mediaType', 'fileMetadata'])) &&
           request.resource.data.text.size() <= 20000 && // Encrypted text is larger
           request.resource.data.senderId is string &&
           request.resource.data.senderName is string &&

@@ -28,6 +28,7 @@ class ChatViewModel: ObservableObject {
     @Published var showingImagePicker = false
     @Published var selectedImage: UIImage?
     @Published var showingVoiceRecorder = false
+    @Published var showingFilePicker = false  // Phase 19: File attachments
     @Published var typingText: String? = nil
     
     // Phase 9.5 Redesign: Per-message encryption toggle
@@ -586,6 +587,95 @@ class ChatViewModel: ObservableObject {
         } catch {
             errorMessage = "Failed to send voice message: \(error.localizedDescription)"
             print("Error sending voice: \(error)")
+        }
+        
+        isSending = false
+    }
+    
+    // Phase 19: Send file attachment
+    func sendFileMessage(fileURL: URL) async {
+        isSending = true
+        errorMessage = nil
+        
+        do {
+            guard let currentUserId = Auth.auth().currentUser?.uid else {
+                throw NSError(domain: "ChatViewModel", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
+            }
+            
+            // Fetch display name from Firestore (like other send methods)
+            let currentUserName = try await messageService.getCurrentUserDisplayName()
+            
+            // Upload file to Firebase Storage
+            let fileMetadata = try await FileService.shared.uploadFile(
+                fileURL,
+                to: conversationId,
+                encrypted: nextMessageEncrypted,
+                userId: currentUserId
+            )
+            
+            // Create message with file metadata
+            var message = Message(
+                id: nil,
+                conversationId: conversationId,
+                senderId: currentUserId,
+                senderName: currentUserName,
+                text: "",  // Files can have empty text
+                timestamp: Date(),
+                status: .sending,
+                type: .file,
+                fileMetadata: fileMetadata,
+                isEncrypted: nextMessageEncrypted
+            )
+            
+            // Optimistically add to messages
+            messages.append(message)
+            
+            // Save to Firestore
+            let docRef = try await db.collection("conversations")
+                .document(conversationId)
+                .collection("messages")
+                .addDocument(data: [
+                    "conversationId": conversationId,
+                    "senderId": currentUserId,
+                    "senderName": currentUserName,
+                    "text": "",
+                    "timestamp": FieldValue.serverTimestamp(),
+                    "status": MessageStatus.sent.rawValue,
+                    "type": MessageType.file.rawValue,
+                    "mediaType": MediaType.file.rawValue,
+                    "fileMetadata": [
+                        "fileName": fileMetadata.fileName,
+                        "fileSize": fileMetadata.fileSize,
+                        "mimeType": fileMetadata.mimeType,
+                        "downloadURL": fileMetadata.downloadURL,
+                        "uploadedBy": fileMetadata.uploadedBy,
+                        "uploadedAt": Timestamp(date: fileMetadata.uploadedAt),
+                        "isEncrypted": fileMetadata.isEncrypted,
+                        "encryptionKeyId": fileMetadata.encryptionKeyId ?? ""
+                    ] as [String: Any],
+                    "isEncrypted": nextMessageEncrypted
+                ])
+            
+            // Update message with ID and status
+            if let index = messages.firstIndex(where: { $0.timestamp == message.timestamp && $0.senderId == currentUserId }) {
+                messages[index].id = docRef.documentID
+                messages[index].status = .sent
+            }
+            
+            // Update conversation's last message
+            try await db.collection("conversations").document(conversationId).updateData([
+                "lastMessage": [
+                    "text": "📎 \(fileMetadata.fileName)",
+                    "senderId": currentUserId,
+                    "senderName": currentUserName,
+                    "timestamp": FieldValue.serverTimestamp(),
+                    "type": MessageType.file.rawValue
+                ] as [String: Any],
+                "lastMessageTime": FieldValue.serverTimestamp()
+            ])
+            
+        } catch {
+            errorMessage = "Failed to send file: \(error.localizedDescription)"
         }
         
         isSending = false

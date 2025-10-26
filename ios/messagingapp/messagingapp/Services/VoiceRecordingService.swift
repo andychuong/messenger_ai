@@ -159,38 +159,75 @@ class VoiceRecordingService: NSObject, ObservableObject, AVAudioPlayerDelegate {
     // MARK: - Playback
     
     /// Play audio from URL
-    func playAudio(from url: URL) {
+    func playAudio(from url: URL, conversationId: String? = nil, isEncrypted: Bool = false) {
         // Stop current playback
         stopPlayback()
         
-        do {
-            // Download if remote URL
-            let localURL: URL
-            if url.isFileURL {
-                localURL = url
-            } else {
-                // For remote URLs, download first (simplified - in production, cache this)
-                localURL = url
-            }
-            
-            audioPlayer = try AVAudioPlayer(contentsOf: localURL)
-            audioPlayer?.delegate = self
-            audioPlayer?.prepareToPlay()
-            audioPlayer?.play()
-            
-            isPlaying = true
-            currentlyPlayingURL = url
-            playbackProgress = 0
-            
-            // Start playback timer
-            playbackTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    self?.updatePlaybackProgress()
+        Task {
+            do {
+                // Get local URL (download if remote, decrypt if encrypted)
+                let localURL = try await getLocalAudioURL(from: url, conversationId: conversationId, isEncrypted: isEncrypted)
+                
+                audioPlayer = try AVAudioPlayer(contentsOf: localURL)
+                audioPlayer?.delegate = self
+                audioPlayer?.prepareToPlay()
+                audioPlayer?.play()
+                
+                isPlaying = true
+                currentlyPlayingURL = url
+                playbackProgress = 0
+                
+                // Start playback timer
+                playbackTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+                    Task { @MainActor [weak self] in
+                        self?.updatePlaybackProgress()
+                    }
                 }
+            } catch {
+                print("Playback error: \(error)")
+                recordingError = "Failed to play audio: \(error.localizedDescription)"
             }
-        } catch {
-            print("Playback error: \(error)")
         }
+    }
+    
+    /// Get local URL for audio file (download if remote, decrypt if encrypted)
+    private func getLocalAudioURL(from url: URL, conversationId: String?, isEncrypted: Bool) async throws -> URL {
+        // If already a local file, return it
+        if url.isFileURL {
+            return url
+        }
+        
+        // Check cache first
+        let cacheKey = url.absoluteString.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? UUID().uuidString
+        let cacheDir = FileManager.default.temporaryDirectory.appendingPathComponent("voice_cache")
+        try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+        let cachedURL = cacheDir.appendingPathComponent(cacheKey + ".m4a")
+        
+        // Return cached file if exists
+        if FileManager.default.fileExists(atPath: cachedURL.path) {
+            return cachedURL
+        }
+        
+        // Download from remote URL
+        let (data, _) = try await URLSession.shared.data(from: url)
+        
+        var finalData = data
+        
+        // Decrypt if encrypted
+        if isEncrypted, let conversationId = conversationId {
+            do {
+                let encryptionService = EncryptionService.shared
+                finalData = try await encryptionService.decryptFile(data, conversationId: conversationId)
+            } catch {
+                print("Failed to decrypt voice message: \(error)")
+                throw error
+            }
+        }
+        
+        // Save to cache
+        try finalData.write(to: cachedURL)
+        
+        return cachedURL
     }
     
     /// Stop playback

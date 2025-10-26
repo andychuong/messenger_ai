@@ -25,6 +25,9 @@ struct MessageRow: View {
     @State private var showingTranslation = false
     @State private var showingTranslationError = false
     @State private var showingOriginal = false // Toggle between original and translated
+    @State private var showingFilePreview = false  // Phase 19: File preview
+    @State private var showingVoiceTranslation = false  // Phase 19.2: Voice translation toggle
+    @State private var selectedVoiceLanguage: String?  // Phase 19.2: Selected language for voice translation
     @StateObject private var voiceService = VoiceRecordingService()
     @StateObject private var translationViewModel = TranslationViewModel()
     
@@ -267,6 +270,10 @@ struct MessageRow: View {
             else if messageType == .voice, let mediaURL = message.mediaURL {
                 voiceMessageView(url: mediaURL, duration: message.voiceDuration ?? 0)
             }
+            // File message (Phase 19)
+            else if messageType == .file, let fileMetadata = message.fileMetadata {
+                fileMessageView(fileMetadata: fileMetadata)
+            }
             // Text message
             else if !message.text.isEmpty {
                 VStack(alignment: isSentByMe ? .trailing : .leading, spacing: 4) {
@@ -348,60 +355,224 @@ struct MessageRow: View {
             let isCurrentlyPlaying = voiceService.isPlaying && voiceService.currentlyPlayingURL == audioURL
             let progress = isCurrentlyPlaying && duration > 0 ? voiceService.playbackProgress / duration : 0
             
-            HStack(spacing: 12) {
-            // Play/Pause button
-            Button {
-                if isCurrentlyPlaying {
-                    voiceService.pausePlayback()
-                } else {
-                    voiceService.playAudio(from: audioURL)
-                }
-            } label: {
-                Image(systemName: isCurrentlyPlaying ? "pause.fill" : "play.fill")
-                    .font(.title3)
-                    .foregroundColor(isSentByMe ? .white : .blue)
-                    .frame(width: 32, height: 32)
-            }
-            
-            // Waveform / Progress bar
-            VStack(alignment: .leading, spacing: 4) {
-                GeometryReader { geometry in
-                    ZStack(alignment: .leading) {
-                        // Background
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill((isSentByMe ? Color.white : Color.gray).opacity(0.3))
-                            .frame(height: 3)
-                        
-                        // Progress
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(isSentByMe ? Color.white : Color.blue)
-                            .frame(width: geometry.size.width * progress, height: 3)
+            VStack(alignment: isSentByMe ? .trailing : .leading, spacing: 8) {
+                // Voice player
+                HStack(spacing: 12) {
+                // Play/Pause button
+                Button {
+                    if isCurrentlyPlaying {
+                        voiceService.pausePlayback()
+                    } else {
+                        // Pass conversation context and encryption status for proper playback
+                        voiceService.playAudio(
+                            from: audioURL,
+                            conversationId: message.conversationId,
+                            isEncrypted: message.isEncrypted ?? false
+                        )
                     }
+                } label: {
+                    Image(systemName: isCurrentlyPlaying ? "pause.fill" : "play.fill")
+                        .font(.title3)
+                        .foregroundColor(isSentByMe ? .white : .blue)
+                        .frame(width: 32, height: 32)
                 }
-                .frame(height: 3)
                 
-                // Duration
-                Text(VoiceRecordingService.formatDuration(isCurrentlyPlaying ? voiceService.playbackProgress : duration))
-                    .font(.caption2)
-                    .foregroundColor(isSentByMe ? .white.opacity(0.8) : .gray)
+                // Waveform / Progress bar
+                VStack(alignment: .leading, spacing: 4) {
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            // Background
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill((isSentByMe ? Color.white : Color.gray).opacity(0.3))
+                                .frame(height: 3)
+                            
+                            // Progress
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(isSentByMe ? Color.white : Color.blue)
+                                .frame(width: geometry.size.width * progress, height: 3)
+                        }
+                    }
+                    .frame(height: 3)
+                    
+                    // Duration
+                    Text(VoiceRecordingService.formatDuration(isCurrentlyPlaying ? voiceService.playbackProgress : duration))
+                        .font(.caption2)
+                        .foregroundColor(isSentByMe ? .white.opacity(0.8) : .gray)
+                }
+                
+                // Waveform icon
+                Image(systemName: "waveform")
+                    .font(.caption)
+                    .foregroundColor(isSentByMe ? .white.opacity(0.6) : .gray)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .frame(minWidth: 200)
+                .background(
+                    isSentByMe ? Color.blue : Color(.systemGray5)
+                )
+                .cornerRadius(20)
+                
+                // Phase 19.2: Voice transcript with translation toggle
+                if let transcript = message.voiceTranscript {
+                    voiceTranscriptView(transcript: transcript)
+                }
             }
-            
-            // Waveform icon
-            Image(systemName: "waveform")
-                .font(.caption)
-                .foregroundColor(isSentByMe ? .white.opacity(0.6) : .gray)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .frame(minWidth: 200)
-            .background(
-                isSentByMe ? Color.blue : Color(.systemGray5)
-            )
-            .cornerRadius(20)
         } else {
             Text("Invalid audio URL")
                 .font(.caption)
                 .foregroundColor(.gray)
+        }
+    }
+    
+    // Phase 19.2: Voice transcript view with translation toggle
+    @ViewBuilder
+    private func voiceTranscriptView(transcript: String) -> some View {
+        VStack(alignment: isSentByMe ? .trailing : .leading, spacing: 4) {
+            // Determine which transcript to show (original or translated)
+            let displayTranscript: String = {
+                if showingVoiceTranslation, 
+                   let selectedLang = selectedVoiceLanguage,
+                   let translatedText = message.voiceTranslations?[selectedLang] {
+                    return translatedText
+                }
+                return transcript
+            }()
+            
+            // Transcript text
+            Text(displayTranscript)
+                .font(.caption)
+                .foregroundColor(isSentByMe ? .white.opacity(0.9) : .secondary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(
+                    (isSentByMe ? Color.blue : Color(.systemGray5)).opacity(0.7)
+                )
+                .cornerRadius(12)
+            
+            // Translation controls if translations exist
+            if let translations = message.voiceTranslations, !translations.isEmpty {
+                HStack(spacing: 4) {
+                    Image(systemName: "text.bubble")
+                        .font(.caption2)
+                    
+                    if showingVoiceTranslation, let lang = selectedVoiceLanguage {
+                        Text("Translated to \(lang)")
+                            .font(.caption2)
+                    } else {
+                        if let detectedLang = message.detectedLanguage {
+                            Text("Original (\(detectedLang))")
+                                .font(.caption2)
+                        } else {
+                            Text("Original")
+                                .font(.caption2)
+                        }
+                    }
+                    
+                    // Toggle button
+                    Menu {
+                        Button("Original") {
+                            showingVoiceTranslation = false
+                            selectedVoiceLanguage = nil
+                        }
+                        
+                        ForEach(Array(translations.keys.sorted()), id: \.self) { lang in
+                            Button(languageDisplayName(lang)) {
+                                showingVoiceTranslation = true
+                                selectedVoiceLanguage = lang
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "chevron.down.circle")
+                            .font(.caption2)
+                            .foregroundColor(.blue)
+                    }
+                }
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 12)
+            }
+        }
+    }
+    
+    // Helper to get display name for language code
+    private func languageDisplayName(_ code: String) -> String {
+        let locale = Locale.current
+        return locale.localizedString(forLanguageCode: code)?.capitalized ?? code
+    }
+    
+    // Phase 19: File attachment view
+    @ViewBuilder
+    private func fileMessageView(fileMetadata: FileMetadata) -> some View {
+        Button {
+            showingFilePreview = true
+        } label: {
+            HStack(spacing: 12) {
+                // File icon
+                ZStack {
+                    Circle()
+                        .fill(fileCategoryColor(for: fileMetadata.fileCategory))
+                        .frame(width: 44, height: 44)
+                    
+                    Image(systemName: fileMetadata.fileCategory.iconName)
+                        .font(.system(size: 20))
+                        .foregroundColor(.white)
+                }
+                
+                // File info
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(fileMetadata.fileName)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(isSentByMe ? .white : .primary)
+                        .lineLimit(2)
+                    
+                    HStack(spacing: 8) {
+                        Text(fileMetadata.formattedFileSize())
+                            .font(.caption)
+                            .foregroundColor(isSentByMe ? .white.opacity(0.7) : .secondary)
+                        
+                        Text(fileMetadata.fileCategory.rawValue.capitalized)
+                            .font(.caption)
+                            .foregroundColor(isSentByMe ? .white.opacity(0.7) : .secondary)
+                    }
+                }
+                
+                Spacer()
+                
+                // Download/view icon
+                Image(systemName: "arrow.down.circle")
+                    .font(.title3)
+                    .foregroundColor(isSentByMe ? .white.opacity(0.8) : .blue)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .frame(minWidth: 250, maxWidth: 300)
+            .background(
+                isSentByMe ? Color.blue : Color(.systemGray5)
+            )
+            .cornerRadius(20)
+        }
+        .sheet(isPresented: $showingFilePreview) {
+            if let messageId = message.id {
+                FilePreviewSheet(
+                    messageId: messageId,
+                    fileMetadata: fileMetadata,
+                    conversationId: message.conversationId,
+                    isPresented: $showingFilePreview
+                )
+            }
+        }
+    }
+    
+    private func fileCategoryColor(for category: FileCategory) -> Color {
+        switch category.color {
+        case "blue": return .blue
+        case "green": return .green
+        case "orange": return .orange
+        case "red": return .red
+        case "purple": return .purple
+        case "indigo": return .indigo
+        default: return .gray
         }
     }
     

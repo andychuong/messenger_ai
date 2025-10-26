@@ -24,6 +24,9 @@ struct MessageInputBar: View {
     // Voice recording
     var onVoiceRecord: (() -> Void)? = nil
     
+    // Phase 19: File attachment
+    var onFilePick: (() -> Void)? = nil
+    
     // Phase 9.5 Redesign: Encryption toggle
     var nextMessageEncrypted: Bool = true
     var onToggleEncryption: (() -> Void)? = nil
@@ -59,6 +62,19 @@ struct MessageInputBar: View {
                         imagePicker()
                     } label: {
                         Image(systemName: "photo")
+                            .font(.title2)
+                            .foregroundColor(.blue)
+                    }
+                    .disabled(isSending)
+                }
+                
+                // Phase 19: File picker button (only show when not editing)
+                if !isEditing, let filePicker = onFilePick {
+                    Button {
+                        HapticManager.shared.light() // Phase 12: Haptic feedback
+                        filePicker()
+                    } label: {
+                        Image(systemName: "paperclip")
                             .font(.title2)
                             .foregroundColor(.blue)
                     }

@@ -23,12 +23,19 @@ struct Message: Identifiable, Codable, Hashable {
     var mediaType: MediaType?
     var voiceTranscript: String?
     var voiceDuration: TimeInterval?  // Duration for voice messages
+    var detectedLanguage: String?  // Phase 19.2: Detected language for voice messages
     var editedAt: Date?
     var originalText: String?
     var replyTo: String?  // messageId for threading
     var threadCount: Int?  // Number of replies in thread
     var reactions: [String: [String]]?  // emoji -> array of user IDs
     var translations: [String: String]?  // languageCode -> translatedText
+    
+    // Phase 19: File metadata for file attachments
+    var fileMetadata: FileMetadata?
+    
+    // Phase 19.2: Voice message translation
+    var voiceTranslations: [String: String]?  // languageCode -> translated transcript
     
     // Read receipts
     var readBy: [ReadReceipt]?
@@ -51,6 +58,7 @@ struct Message: Identifiable, Codable, Hashable {
         case mediaType
         case voiceTranscript
         case voiceDuration
+        case detectedLanguage
         case editedAt
         case originalText
         case replyTo
@@ -60,6 +68,8 @@ struct Message: Identifiable, Codable, Hashable {
         case readBy
         case deliveredTo
         case isEncrypted
+        case fileMetadata
+        case voiceTranslations
     }
 }
 
@@ -76,6 +86,7 @@ enum MessageType: String, Codable, Hashable {
     case image
     case voice
     case video
+    case file  // Phase 19: File attachments
     case system  // For system messages like "User joined"
 }
 
@@ -83,6 +94,7 @@ enum MediaType: String, Codable {
     case image
     case voice
     case video
+    case file  // Phase 19: File attachments
 }
 
 struct ReadReceipt: Codable, Hashable {

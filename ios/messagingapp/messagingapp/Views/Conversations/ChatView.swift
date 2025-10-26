@@ -143,20 +143,35 @@ struct ChatView: View {
                         .disabled(viewModel.isSending)
                     }
                     
-                    // Image picker button
-                    if !viewModel.isEditingMessage {
-                        Button {
-                            HapticManager.shared.light()
-                            viewModel.showingImagePicker = true
+                    // Phase 19 UX: Combined Image/File picker button (only when not typing)
+                    if !viewModel.isEditingMessage && viewModel.messageText.isEmpty {
+                        Menu {
+                            Button {
+                                HapticManager.shared.light()
+                                viewModel.showingImagePicker = true
+                            } label: {
+                                Label("Photo or Video", systemImage: "photo")
+                            }
+                            
+                            Button {
+                                HapticManager.shared.light()
+                                viewModel.showingFilePicker = true
+                            } label: {
+                                Label("Document or File", systemImage: "doc")
+                            }
                         } label: {
                             Image(systemName: "photo")
                                 .font(.title2)
                                 .foregroundColor(.blue)
+                        } primaryAction: {
+                            // Single tap = image picker (default behavior)
+                            HapticManager.shared.light()
+                            viewModel.showingImagePicker = true
                         }
                         .disabled(viewModel.isSending)
                     }
                     
-                    // Phase 15: Formality adjustment button
+                    // Phase 15: Formality adjustment button (shows when typing)
                     if !viewModel.isEditingMessage,
                        !viewModel.nextMessageEncrypted,
                        !viewModel.messageText.isEmpty,
@@ -451,6 +466,16 @@ struct ChatView: View {
         }
         .sheet(isPresented: $viewModel.showingImagePicker) {
             ImagePicker(image: $viewModel.selectedImage, isPresented: $viewModel.showingImagePicker)
+        }
+        .sheet(isPresented: $viewModel.showingFilePicker) {
+            FileSelectionSheet(
+                isPresented: $viewModel.showingFilePicker,
+                onFileSelected: { fileURL in
+                    Task {
+                        await viewModel.sendFileMessage(fileURL: fileURL)
+                    }
+                }
+            )
         }
         .fullScreenCover(isPresented: $viewModel.showingVoiceRecorder) {
             VoiceRecorderView(
