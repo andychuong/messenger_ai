@@ -21,6 +21,9 @@ struct SettingsView: View {
             // Translation Section
             translationSection
             
+            // Phase 18: Timezone Section
+            timezoneSection
+            
             // Phase 15: Enhanced Translation Features
             enhancedTranslationSection
             
@@ -101,6 +104,62 @@ struct SettingsView: View {
         } footer: {
             Text("Set your preferred language for auto-translation of messages. You can enable auto-translation per conversation in the chat view.")
         }
+    }
+    
+    // MARK: - Phase 18: Timezone Section
+    
+    private var timezoneSection: some View {
+        Section {
+            Toggle(isOn: $settingsService.settings.autoDetectTimezone) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("Auto-Detect Timezone", systemImage: "location.circle.fill")
+                    Text("Automatically detect your current timezone")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .onChange(of: settingsService.settings.autoDetectTimezone) { _, newValue in
+                HapticManager.shared.selection()
+                if newValue {
+                    // Update timezone to current
+                    settingsService.settings.timezone = TimeZone.current.identifier
+                }
+            }
+            
+            if !settingsService.settings.autoDetectTimezone {
+                NavigationLink {
+                    TimezoneSelectionView(selectedTimezone: $settingsService.settings.timezone)
+                } label: {
+                    HStack {
+                        Label("Timezone", systemImage: "clock")
+                        Spacer()
+                        Text(timezoneDisplayName)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            } else {
+                HStack {
+                    Label("Current Timezone", systemImage: "clock")
+                    Spacer()
+                    Text(timezoneDisplayName)
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+        } header: {
+            Text("Timezone")
+        } footer: {
+            Text("Your timezone will be shown to other users when messaging if you're in different time zones.")
+        }
+    }
+    
+    private var timezoneDisplayName: String {
+        guard let tz = TimeZone(identifier: settingsService.settings.timezone) else {
+            return "Unknown"
+        }
+        let offset = tz.secondsFromGMT() / 3600
+        let offsetString = offset >= 0 ? "+\(offset)" : "\(offset)"
+        return "\(tz.abbreviation() ?? tz.identifier) (UTC\(offsetString))"
     }
     
     // MARK: - Phase 15: Enhanced Translation Section

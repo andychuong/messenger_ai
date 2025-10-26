@@ -15,7 +15,8 @@ class SmartReplyService {
     
     private let functions = Functions.functions()
     private var cache: [String: CachedSmartReplies] = [:]
-    private let cacheExpirationTime: TimeInterval = 5 * 60 // 5 minutes
+    private let cacheExpirationTime: TimeInterval = 60 // 1 minute (reduced from 5)
+    private var pendingRequests: [String: Task<[SmartReply], Error>] = [:]
     
     private init() {}
     
@@ -28,68 +29,108 @@ class SmartReplyService {
         userLanguage: String = "English",
         relationship: RelationshipType = .friend
     ) async throws -> [SmartReply] {
-        // Check cache first
+        // Check if there's already a pending request for this conversation
+        if let pendingTask = pendingRequests[conversationId] {
+            // Wait for the existing request instead of making a new one
+            return try await pendingTask.value
+        }
+        
+        // Check cache first - return immediately if valid
         if let cached = getCachedReplies(for: conversationId) {
             return cached
         }
         
+        // Also check if we have expired cache - we'll return it immediately
+        // while generating fresh results in the background
+        let expiredCache = getExpiredCachedReplies(for: conversationId)
+        
         guard let currentUserId = Auth.auth().currentUser?.uid else {
+            // If we have expired cache and no auth, return expired cache rather than failing
+            if let expired = expiredCache {
+                return expired
+            }
             throw NSError(domain: "SmartReplyService", code: 401, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
         }
         
-        // Prepare messages for the API (only send last 10)
-        let messagesToSend = Array(recentMessages.suffix(10))
-        let messageData = messagesToSend.map { message in
-            return [
-                "senderId": message.senderId,
-                "senderName": message.senderName ?? "Unknown",
-                "text": message.text,
-                "timestamp": message.timestamp.timeIntervalSince1970
-            ] as [String: Any]
-        }
-        
-        let requestData: [String: Any] = [
-            "conversationId": conversationId,
-            "recentMessages": messageData,
-            "userLanguage": userLanguage,
-            "recipientInfo": [
-                "relationship": relationship.rawValue,
-                "formalityPreference": nil
-            ] as [String: Any?],
-            "currentUserId": currentUserId
-        ]
-        
-        // Call Cloud Function
-        let result = try await functions.httpsCallable("generateSmartReplies").call(requestData)
-        
-        guard let data = result.data as? [String: Any],
-              let success = data["success"] as? Bool,
-              success else {
-            throw NSError(domain: "SmartReplyService", code: 500, userInfo: [NSLocalizedDescriptionKey: "Failed to generate smart replies"])
-        }
-        
-        guard let suggestionsData = data["suggestions"] as? [[String: Any]] else {
-            throw NSError(domain: "SmartReplyService", code: 500, userInfo: [NSLocalizedDescriptionKey: "Invalid response format"])
-        }
-        
-        // Parse suggestions
-        let suggestions = suggestionsData.compactMap { dict -> SmartReply? in
-            guard let text = dict["text"] as? String,
-                  let toneString = dict["tone"] as? String,
-                  let confidence = dict["confidence"] as? Double else {
-                return nil
+        // Create a task for the API call to allow deduplication
+        let task = Task<[SmartReply], Error> {
+            // Prepare messages for the API (only send last 10)
+            let messagesToSend = Array(recentMessages.suffix(10))
+            let messageData = messagesToSend.map { message in
+                return [
+                    "senderId": message.senderId,
+                    "senderName": message.senderName ?? "Unknown",
+                    "text": message.text,
+                    "timestamp": message.timestamp.timeIntervalSince1970
+                ] as [String: Any]
             }
             
-            let tone = ReplyTone(rawValue: toneString) ?? .friendly
-            let reasoning = dict["reasoning"] as? String
+            let requestData: [String: Any] = [
+                "conversationId": conversationId,
+                "recentMessages": messageData,
+                "userLanguage": userLanguage,
+                "recipientInfo": [
+                    "relationship": relationship.rawValue,
+                    "formalityPreference": nil
+                ] as [String: Any?],
+                "currentUserId": currentUserId
+            ]
             
-            return SmartReply(text: text, tone: tone, confidence: confidence, reasoning: reasoning)
+            // Call Cloud Function
+            let result = try await self.functions.httpsCallable("generateSmartReplies").call(requestData)
+            
+            guard let data = result.data as? [String: Any],
+                  let success = data["success"] as? Bool,
+                  success else {
+                throw NSError(domain: "SmartReplyService", code: 500, userInfo: [NSLocalizedDescriptionKey: "Failed to generate smart replies"])
+            }
+            
+            guard let suggestionsData = data["suggestions"] as? [[String: Any]] else {
+                throw NSError(domain: "SmartReplyService", code: 500, userInfo: [NSLocalizedDescriptionKey: "Invalid response format"])
+            }
+            
+            // Parse suggestions
+            let suggestions = suggestionsData.compactMap { dict -> SmartReply? in
+                guard let text = dict["text"] as? String,
+                      let toneString = dict["tone"] as? String,
+                      let confidence = dict["confidence"] as? Double else {
+                    return nil
+                }
+                
+                let tone = ReplyTone(rawValue: toneString) ?? .friendly
+                let reasoning = dict["reasoning"] as? String
+                
+                return SmartReply(text: text, tone: tone, confidence: confidence, reasoning: reasoning)
+            }
+            
+            // Cache the results
+            self.cacheReplies(suggestions, for: conversationId)
+            
+            return suggestions
         }
         
-        // Cache the results
-        cacheReplies(suggestions, for: conversationId)
+        // Store the pending request
+        pendingRequests[conversationId] = task
         
-        return suggestions
+        // If we have expired cache, return it immediately and let the task update in background
+        if let expired = expiredCache {
+            // Start the task in background to refresh cache
+            Task {
+                _ = try? await task.value
+                pendingRequests[conversationId] = nil
+            }
+            return expired
+        }
+        
+        // Wait for the task to complete
+        do {
+            let result = try await task.value
+            pendingRequests[conversationId] = nil
+            return result
+        } catch {
+            pendingRequests[conversationId] = nil
+            throw error
+        }
     }
     
     /// Get cached smart replies if available and not expired
@@ -105,6 +146,21 @@ class SmartReplyService {
         }
         
         return cached.replies
+    }
+    
+    /// Get expired cached smart replies (used to show stale data while refreshing)
+    private func getExpiredCachedReplies(for conversationId: String) -> [SmartReply]? {
+        guard let cached = cache[conversationId] else {
+            return nil
+        }
+        
+        // Only return if it's expired but not too old (within 10 minutes)
+        let age = Date().timeIntervalSince(cached.timestamp)
+        if age > cacheExpirationTime && age < 600 {
+            return cached.replies
+        }
+        
+        return nil
     }
     
     /// Cache smart replies for a conversation

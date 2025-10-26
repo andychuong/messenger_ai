@@ -24,12 +24,13 @@ extension MessageService {
         // Phase 9.5 Redesign: Thread replies are always encrypted
         let encryptedText = try await encryptionService.encryptMessage(text, conversationId: conversationId)
         
-        // Create thread reply message
+        // Create thread reply message with sent status
         var message = Message.create(
             conversationId: conversationId,
             senderId: currentUserId,
             senderName: displayName,
             text: encryptedText,
+            status: .sent,  // Create as sent to avoid permission errors
             isEncrypted: true
         )
         message.replyTo = parentMessageId
@@ -42,7 +43,6 @@ extension MessageService {
             .collection("thread")
         
         let docRef = try await threadRef.addDocument(data: try Firestore.Encoder().encode(message))
-        try await docRef.updateData(["status": MessageStatus.sent.rawValue])
         
         // Update parent message's reply count and last reply time
         let parentRef = db.collection("conversations")

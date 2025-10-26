@@ -23,6 +23,7 @@ admin.initializeApp();
 export * from "./messaging/notifications";
 export * from "./messaging/friendships";
 export * from "./messaging/callNotifications";
+export * from "./messaging/syncUserData"; // Sync user data to conversations
 export * from "./ai/translation";
 export * from "./ai/assistant";
 export * from "./ai/langchainAgent"; // LangChain-powered agent
@@ -42,6 +43,8 @@ export * from "./ai/smartReplies"; // Context-aware smart replies
 export * from "./ai/smartCompose"; // Type-ahead suggestions
 // Phase 17: Enhanced Data Extraction
 export * from "./ai/dataExtraction"; // Multilingual structured data extraction
+// Phase 18: Timezone Coordination
+export * from "./ai/meetingScheduler"; // Meeting time suggestions with timezone awareness
 
 /**
  * Health check function

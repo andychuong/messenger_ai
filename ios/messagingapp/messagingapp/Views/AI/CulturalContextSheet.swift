@@ -328,15 +328,9 @@ struct IdiomPreviewCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("\"")
-                    .font(.title2)
-                    .foregroundColor(.secondary)
-                + Text(idiom.phrase)
+                Text("\"\(idiom.phrase)\"")
                     .font(.body)
                     .fontWeight(.semibold)
-                + Text("\"")
-                    .font(.title2)
-                    .foregroundColor(.secondary)
                 
                 Spacer()
             }

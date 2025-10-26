@@ -207,6 +207,9 @@ struct ChatView: View {
                                 }
                             }
                             .onChange(of: viewModel.messageText) { oldValue, newValue in
+                                // Handle typing indicators
+                                viewModel.handleTextChange()
+                                
                                 // Phase 16: Trigger smart compose
                                 if SmartReplyService.shared.getSettings().enabled && !viewModel.isEditingMessage {
                                     viewModel.generateSmartCompose(partialText: newValue)
@@ -294,12 +297,11 @@ struct ChatView: View {
             }
             .background(Color(.systemBackground))
             .focused($isInputFocused)
-            .onChange(of: viewModel.messageText) { oldValue, newValue in
-                viewModel.handleTextChange()
-            }
         }
         .navigationTitle(viewModel.conversationTitle)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarBackground(Color(.systemBackground), for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .principal) {
                 navigationTitleView
@@ -534,7 +536,9 @@ struct ChatView: View {
                                         }
                                     },
                                     autoTranslateEnabled: viewModel.autoTranslateEnabled,
-                                    translatedText: message.id != nil ? viewModel.translatedMessages[message.id!] : nil
+                                    translatedText: message.id != nil ? viewModel.translatedMessages[message.id!] : nil,
+                                    senderTimezone: viewModel.participantTimezones[message.senderId],
+                                    currentUserTimezone: viewModel.currentUserId != nil ? viewModel.participantTimezones[viewModel.currentUserId!] : nil
                                 )
                                 .id(message.id)
                             }
@@ -547,6 +551,11 @@ struct ChatView: View {
                     }
                 }
                 .padding(.top, 8)
+            }
+            .refreshable {
+                await viewModel.loadMessages()
+                await viewModel.fetchParticipantTimezones()
+                HapticManager.shared.success()
             }
             .defaultScrollAnchor(.bottom)
             .onChange(of: viewModel.messages.count) { oldCount, newCount in
@@ -600,6 +609,7 @@ struct ChatView: View {
                         .font(.headline)
                         .lineLimit(1)
                         .truncationMode(.tail)
+                    
                     Text("\(viewModel.memberCount) members")
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -607,38 +617,82 @@ struct ChatView: View {
                 .frame(maxWidth: 200)
             }
         } else {
-            HStack(spacing: 6) {
-                Text(viewModel.conversationTitle)
-                    .font(.headline)
-                    .foregroundColor(.primary)
-                
-                if viewModel.otherUserStatus == .online {
-                    ZStack {
-                        Circle()
-                            .fill(Color.green)
-                            .frame(width: 10, height: 10)
-                        Circle()
-                            .stroke(Color.white, lineWidth: 2)
-                            .frame(width: 10, height: 10)
+            VStack(spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(viewModel.conversationTitle)
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                    
+                    if viewModel.otherUserStatus == .online {
+                        ZStack {
+                            Circle()
+                                .fill(Color.green)
+                                .frame(width: 10, height: 10)
+                            Circle()
+                                .stroke(Color.white, lineWidth: 2)
+                                .frame(width: 10, height: 10)
+                        }
                     }
                 }
+                
+                // Phase 18: Timezone difference display
+                if let timezoneText = otherUserTimezoneText {
+                    Text(timezoneText)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
             }
+        }
+    }
+    
+    // Phase 18: Calculate timezone difference text for other user
+    private var otherUserTimezoneText: String? {
+        guard let currentUserId = viewModel.currentUserId,
+              let otherUserTimezone = viewModel.participantTimezones[viewModel.otherUserId],
+              let currentUserTimezone = viewModel.participantTimezones[currentUserId],
+              let otherTZ = TimeZone(identifier: otherUserTimezone),
+              let currentTZ = TimeZone(identifier: currentUserTimezone) else {
+            return nil
+        }
+        
+        let currentOffset = currentTZ.secondsFromGMT() / 3600
+        let otherOffset = otherTZ.secondsFromGMT() / 3600
+        let difference = otherOffset - currentOffset
+        
+        // Check if offsets are the same (more reliable than timezone equality)
+        if difference == 0 {
+            return "Same timezone"
+        } else if difference > 0 {
+            return "\(difference) hour\(difference == 1 ? "" : "s") ahead"
+        } else {
+            return "\(abs(difference)) hour\(abs(difference) == 1 ? "" : "s") behind"
         }
     }
     
     @ViewBuilder
     private var trailingToolbarButtons: some View {
         HStack(spacing: 16) {
+            // Primary actions - visible
             translationButton
-            dataExtractionButton
             aiAssistantButton
             
+            if !viewModel.isGroupChat && !viewModel.otherUserId.isEmpty {
+                callButtons
+            }
+            
+            // Group chat info
             if viewModel.isGroupChat {
                 groupInfoButton
             }
             
-            if !viewModel.isGroupChat && !viewModel.otherUserId.isEmpty {
-                callButtons
+            // More menu (Extract Data)
+            Button {
+                showingExtractedData = true
+                HapticManager.shared.selection()
+            } label: {
+                Image(systemName: "doc.text.magnifyingglass")
+                    .font(.title3)
+                    .foregroundColor(.blue)
             }
         }
     }

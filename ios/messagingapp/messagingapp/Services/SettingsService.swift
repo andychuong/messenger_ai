@@ -31,6 +31,15 @@ class SettingsService: ObservableObject {
                     }
                 }
             }
+            
+            // Phase 18: Sync timezone to Firestore if changed
+            if oldValue.timezone != settings.timezone {
+                Task {
+                    if let authService = AuthService.shared {
+                        try? await authService.updateTimezone(settings.timezone)
+                    }
+                }
+            }
         }
     }
     

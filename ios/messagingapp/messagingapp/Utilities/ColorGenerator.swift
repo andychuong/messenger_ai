@@ -26,8 +26,11 @@ struct ColorGenerator {
     /// - Parameter userId: User ID to generate color for
     /// - Returns: A color from the palette
     static func color(for userId: String) -> Color {
-        // Use hash of userId to get consistent color
-        let hash = abs(userId.hashValue)
+        // Use deterministic hash of userId to get consistent color
+        // hashValue is not stable across app launches, so we create our own
+        let hash = userId.utf8.reduce(0) { result, byte in
+            (result &+ Int(byte) &* 31) & 0x7FFFFFFF
+        }
         let index = hash % colorPalette.count
         return colorPalette[index]
     }

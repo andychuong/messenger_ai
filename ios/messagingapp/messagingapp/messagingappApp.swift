@@ -84,6 +84,21 @@ struct messagingappApp: App {
                             CallService.shared.currentUserId = userId
                             CallService.shared.startListening()
                         }
+                        
+                        // Phase 18: Sync timezone to Firestore if auto-detect is enabled
+                        Task {
+                            if settingsService.settings.autoDetectTimezone {
+                                let currentTimezone = TimeZone.current.identifier
+                                if settingsService.settings.timezone != currentTimezone {
+                                    settingsService.settings.timezone = currentTimezone
+                                }
+                                // Force sync on app start
+                                try? await authService.updateTimezone(currentTimezone)
+                            } else {
+                                // Sync current timezone setting to Firestore
+                                try? await authService.updateTimezone(settingsService.settings.timezone)
+                            }
+                        }
                     }
             } else {
                 LoginView(authService: authService)

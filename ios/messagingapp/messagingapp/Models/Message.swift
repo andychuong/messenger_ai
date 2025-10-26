@@ -221,6 +221,7 @@ extension Message {
         senderId: String,
         senderName: String,
         text: String,
+        status: MessageStatus = .sending,  // Default to sending
         isEncrypted: Bool = true  // Phase 9.5 Redesign: Default to encrypted
     ) -> Message {
         return Message(
@@ -230,7 +231,7 @@ extension Message {
             senderName: senderName,
             text: text,
             timestamp: Date(),
-            status: .sending,
+            status: status,
             type: .text,
             mediaURL: nil,
             mediaType: nil,

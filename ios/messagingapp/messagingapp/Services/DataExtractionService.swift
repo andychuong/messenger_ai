@@ -48,8 +48,8 @@ class DataExtractionService: ObservableObject {
         // Prepare messages for API
         let messagesData = messages.map { message in
             [
-                "id": message.id,
-                "text": message.text,
+                "id": message.id ?? "",
+                "text": message.text ?? "",
                 "senderId": message.senderId,
                 "timestamp": ISO8601DateFormatter().string(from: message.timestamp)
             ] as [String: Any]

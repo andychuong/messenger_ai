@@ -126,6 +126,19 @@ class AuthService: ObservableObject {
                 self.isAuthenticated = true
                 self.isLoading = false
                 print("✅ User data loaded: \(user.displayName)")
+                
+                // Sync user preferences from Firestore to local settings
+                await MainActor.run {
+                    if let preferredLanguage = user.preferredLanguage {
+                        SettingsService.shared.settings.preferredLanguage = preferredLanguage
+                        print("✅ Synced preferred language to settings: \(preferredLanguage)")
+                    }
+                    
+                    if let timezone = user.timezone {
+                        SettingsService.shared.settings.timezone = timezone
+                        print("✅ Synced timezone to settings: \(timezone)")
+                    }
+                }
             } else {
                 self.isLoading = false
             }
@@ -166,6 +179,27 @@ class AuthService: ObservableObject {
         
         await fetchUserData(userId: userId)
         print("✅ Updated preferred language to: \(language ?? "none")")
+    }
+    
+    // Phase 18: Update user timezone
+    func updateTimezone(_ timezone: String) async throws {
+        guard let userId = currentUser?.id else { return }
+        
+        // Calculate timezone offset
+        let timezoneObj = TimeZone(identifier: timezone) ?? TimeZone.current
+        let offsetHours = timezoneObj.secondsFromGMT() / 3600
+        
+        let updates: [String: Any] = [
+            "timezone": timezone,
+            "timezoneOffset": offsetHours
+        ]
+        
+        try await db.collection(User.collectionName)
+            .document(userId)
+            .updateData(updates)
+        
+        await fetchUserData(userId: userId)
+        print("✅ Updated timezone to: \(timezone) (offset: \(offsetHours)h)")
     }
     
     func resetPassword(email: String) async throws {

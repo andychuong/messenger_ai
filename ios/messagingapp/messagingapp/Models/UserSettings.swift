@@ -30,6 +30,15 @@ struct UserSettings: Codable {
     var slangAnalysisEnabled: Bool = true
     var formalityAdjustmentEnabled: Bool = true
     
+    // MARK: - Phase 18: Timezone Coordination
+    var timezone: String = TimeZone.current.identifier // e.g., "America/New_York"
+    var autoDetectTimezone: Bool = true
+    var workingHoursEnabled: Bool = false
+    var workingHoursStart: String = "09:00" // 24-hour format
+    var workingHoursEnd: String = "17:00"
+    var workingDays: [String] = ["Mon", "Tue", "Wed", "Thu", "Fri"]
+    var autoStatusEnabled: Bool = false // Auto-set status based on working hours
+    
     // MARK: - Notifications (for future use)
     var notificationsEnabled: Bool = true
     var messagePreviewEnabled: Bool = true

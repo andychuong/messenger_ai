@@ -25,6 +25,7 @@ class ConversationListViewModel: ObservableObject {
     private let conversationService = ConversationService()
     private var conversationsListener: ListenerRegistration?
     private var userStatusListeners: [String: ListenerRegistration] = [:] // userId -> listener
+    private var userDataCache: [String: (status: String, photoURL: String?, name: String)] = [:] // userId -> cached user data
     private let db = Firestore.firestore()
     
     var currentUserId: String? {
@@ -46,6 +47,7 @@ class ConversationListViewModel: ObservableObject {
         // Remove all user status listeners
         userStatusListeners.values.forEach { $0.remove() }
         userStatusListeners.removeAll()
+        userDataCache.removeAll()
     }
     
     // MARK: - Setup
@@ -53,10 +55,52 @@ class ConversationListViewModel: ObservableObject {
     func setupRealtimeListener() {
         conversationsListener = conversationService.listenToConversations { [weak self] conversations in
             Task { @MainActor in
-                self?.conversations = conversations
-                self?.filterConversations()
-                // Set up status listeners for all participants
-                self?.setupUserStatusListeners()
+                guard let self = self else { return }
+                
+                // Initialize cache from conversation data if cache is empty
+                if self.userDataCache.isEmpty {
+                    print("📦 Messages: Initializing cache from conversation data")
+                    for conversation in conversations {
+                        for (userId, detail) in conversation.participantDetails {
+                            if self.userDataCache[userId] == nil {
+                                self.userDataCache[userId] = (
+                                    status: detail.status ?? "offline",
+                                    photoURL: detail.photoURL,
+                                    name: detail.name
+                                )
+                            }
+                        }
+                    }
+                    print("✅ Messages: Initialized cache with \(self.userDataCache.count) user(s)")
+                }
+                
+                // Apply cached user data to incoming conversations
+                var updatedConversations = conversations
+                var cacheApplied = 0
+                for i in 0..<updatedConversations.count {
+                    for (userId, cachedData) in self.userDataCache {
+                        if updatedConversations[i].participantDetails[userId] != nil {
+                            updatedConversations[i].participantDetails[userId]?.status = cachedData.status
+                            updatedConversations[i].participantDetails[userId]?.photoURL = cachedData.photoURL
+                            updatedConversations[i].participantDetails[userId]?.name = cachedData.name
+                            cacheApplied += 1
+                        }
+                    }
+                }
+                if cacheApplied > 0 {
+                    print("✅ Messages: Applied cached data for \(cacheApplied) participant(s)")
+                }
+                
+                // Only update if conversations actually changed
+                let conversationsChanged = self.conversations != updatedConversations
+                
+                self.conversations = updatedConversations
+                
+                if conversationsChanged {
+                    self.filterConversations()
+                    // Set up status listeners only when participant list changes
+                    self.setupUserStatusListeners()
+                }
             }
         }
     }
@@ -78,27 +122,39 @@ class ConversationListViewModel: ObservableObject {
         // Remove listeners for users no longer in any conversation
         let existingIds = Set(userStatusListeners.keys)
         let idsToRemove = existingIds.subtracting(participantIds)
-        for userId in idsToRemove {
-            userStatusListeners[userId]?.remove()
-            userStatusListeners.removeValue(forKey: userId)
+        if !idsToRemove.isEmpty {
+            print("🗑️ Removing \(idsToRemove.count) status listener(s)")
+            for userId in idsToRemove {
+                userStatusListeners[userId]?.remove()
+                userStatusListeners.removeValue(forKey: userId)
+                userDataCache.removeValue(forKey: userId) // Also remove from cache
+            }
         }
         
         // Add listeners for new users
-        for userId in participantIds {
-            // Skip if already listening
-            guard userStatusListeners[userId] == nil else { continue }
-            
+        let idsToAdd = participantIds.subtracting(existingIds)
+        if !idsToAdd.isEmpty {
+            print("➕ Adding \(idsToAdd.count) new status listener(s)")
+        }
+        
+        for userId in idsToAdd {
             let listener = db.collection("users")
                 .document(userId)
-                .addSnapshotListener { [weak self] snapshot, error in
+                .addSnapshotListener(includeMetadataChanges: false) { [weak self] snapshot, error in
                     guard let self = self,
-                          let data = snapshot?.data(),
-                          let statusString = data["status"] as? String else {
+                          let snapshot = snapshot,
+                          !snapshot.metadata.isFromCache, // Ignore cached data
+                          !snapshot.metadata.hasPendingWrites else { // Ignore local writes
+                        return
+                    }
+                    
+                    guard let updatedUser = try? snapshot.data(as: User.self) else {
+                        print("❌ Messages: Failed to decode user data for \(userId)")
                         return
                     }
                     
                     Task { @MainActor in
-                        self.updateUserStatus(userId: userId, status: statusString)
+                        self.updateUserData(userId: userId, user: updatedUser)
                     }
                 }
             
@@ -106,16 +162,54 @@ class ConversationListViewModel: ObservableObject {
         }
     }
     
-    /// Update the status for a specific user across all conversations
-    private func updateUserStatus(userId: String, status: String) {
-        // Update status in all conversations where this user is a participant
-        for i in 0..<conversations.count {
-            if conversations[i].participantDetails[userId] != nil {
-                conversations[i].participantDetails[userId]?.status = status
+    /// Update user data (status, photo, name) for a specific user across all conversations
+    private func updateUserData(userId: String, user: User) {
+        // Check if anything changed
+        let cachedData = userDataCache[userId]
+        let statusChanged = cachedData?.status != user.status.rawValue
+        let photoChanged = cachedData?.photoURL != user.photoURL
+        let nameChanged = cachedData?.name != user.displayName
+        
+        if !statusChanged && !photoChanged && !nameChanged {
+            return // Nothing changed
+        }
+        
+        print("🔄 Messages: User data updated for \(user.displayName)")
+        
+        // Log what changed
+        if statusChanged {
+            print("   📍 Status: \(cachedData?.status ?? "nil") → \(user.status.rawValue)")
+        }
+        if photoChanged {
+            print("   🖼️ Photo: \(cachedData?.photoURL ?? "nil") → \(user.photoURL ?? "nil")")
+        }
+        if nameChanged {
+            print("   ✏️ Name: \(cachedData?.name ?? "unknown") → \(user.displayName)")
+        }
+        
+        // Update the cache
+        userDataCache[userId] = (status: user.status.rawValue, photoURL: user.photoURL, name: user.displayName)
+        
+        // Update all fields in conversations where this user is a participant
+        var conversationsToUpdate: [Int] = []
+        for (index, conversation) in conversations.enumerated() {
+            if conversation.participantDetails[userId] != nil {
+                conversationsToUpdate.append(index)
             }
         }
-        // Trigger UI update
-        filterConversations()
+        
+        if !conversationsToUpdate.isEmpty {
+            print("✅ Messages: Updating \(conversationsToUpdate.count) conversation(s)")
+            for index in conversationsToUpdate {
+                conversations[index].participantDetails[userId]?.status = user.status.rawValue
+                conversations[index].participantDetails[userId]?.photoURL = user.photoURL
+                conversations[index].participantDetails[userId]?.name = user.displayName
+            }
+            
+            // Trigger UI update
+            filterConversations()
+            print("✅ Messages: UI refreshed")
+        }
     }
     
     // MARK: - Load Conversations
@@ -263,4 +357,5 @@ class ConversationListViewModel: ObservableObject {
         }
     }
 }
+
 

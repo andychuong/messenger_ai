@@ -15,6 +15,10 @@ struct MessageRow: View {
     var autoTranslateEnabled: Bool = false
     var translatedText: String? = nil
     
+    // Timezone support (Phase 18)
+    var senderTimezone: String? = nil
+    var currentUserTimezone: String? = nil
+    
     @State private var showingActionMenu = false
     @State private var showingEmojiPicker = false
     @State private var showingTranslationMenu = false
@@ -46,6 +50,29 @@ struct MessageRow: View {
             return translated
         }
         return message.text
+    }
+    
+    // Calculate timezone difference
+    private var timezoneDifference: String? {
+        guard let senderTZ = senderTimezone,
+              let currentTZ = currentUserTimezone,
+              let senderTimezone = TimeZone(identifier: senderTZ),
+              let currentTimezone = TimeZone(identifier: currentTZ) else {
+            return nil
+        }
+        
+        let currentOffset = currentTimezone.secondsFromGMT() / 3600
+        let senderOffset = senderTimezone.secondsFromGMT() / 3600
+        let difference = senderOffset - currentOffset
+        
+        // If same offset, don't show anything
+        if difference == 0 {
+            return nil
+        } else if difference > 0 {
+            return "+\(difference)h"
+        } else {
+            return "\(difference)h"
+        }
     }
     
     var body: some View {
@@ -195,25 +222,39 @@ struct MessageRow: View {
     private var messageBubble: some View {
         VStack(alignment: isSentByMe ? .trailing : .leading, spacing: 4) {
             if isGroupChat && !isSentByMe {
-                HStack(spacing: 6) {
-                    // Small avatar circle
-                    let senderName = message.senderName ?? "Unknown"
-                    let senderColor = ColorGenerator.color(for: message.senderId)
-                    let initials = ColorGenerator.initials(from: senderName)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        // Small avatar circle
+                        let senderName = message.senderName ?? "Unknown"
+                        let senderColor = ColorGenerator.color(for: message.senderId)
+                        let initials = ColorGenerator.initials(from: senderName)
+                        
+                        Circle()
+                            .fill(senderColor)
+                            .frame(width: 18, height: 18)
+                            .overlay(
+                                Text(initials)
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundColor(.white)
+                            )
+                        
+                        Text(senderName)
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(senderColor)
+                    }
                     
-                    Circle()
-                        .fill(senderColor)
-                        .frame(width: 18, height: 18)
-                        .overlay(
-                            Text(initials)
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundColor(.white)
-                        )
-                    
-                    Text(senderName)
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundColor(senderColor)
+                    // Show timezone difference if exists
+                    if let tzDiff = timezoneDifference {
+                        HStack(spacing: 3) {
+                            Image(systemName: "clock.fill")
+                                .font(.system(size: 8))
+                            Text(tzDiff)
+                                .font(.system(size: 10))
+                        }
+                        .foregroundColor(.secondary)
+                        .padding(.leading, 24)  // Align with name after avatar
+                    }
                 }
                 .padding(.leading, 12)
             }
@@ -434,6 +475,17 @@ struct MessageRow: View {
             Text(message.formattedTime())
                 .font(.caption2)
                 .foregroundColor(.gray)
+            
+            // Show timezone difference in direct chats (not group chats)
+            if !isGroupChat && !isSentByMe, let tzDiff = timezoneDifference {
+                HStack(spacing: 2) {
+                    Image(systemName: "clock.fill")
+                        .font(.system(size: 8))
+                    Text(tzDiff)
+                        .font(.caption2)
+                }
+                .foregroundColor(.secondary)
+            }
             
             if isSentByMe {
                 if isGroupChat {

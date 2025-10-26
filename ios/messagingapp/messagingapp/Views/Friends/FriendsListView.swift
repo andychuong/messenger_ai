@@ -247,6 +247,10 @@ struct FriendRow: View {
             return "Last seen \(timeAgo(from: user.lastSeen))"
         case .away:
             return "Away"
+        case .busy:
+            return "Busy"
+        case .doNotDisturb:
+            return "Do Not Disturb"
         }
     }
     

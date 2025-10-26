@@ -201,12 +201,19 @@ class ConversationService: ObservableObject {
         let listener = db.collection("conversations")
             .whereField("participants", arrayContains: currentUserId)
             .order(by: "lastMessageTime", descending: true)
-            .addSnapshotListener { snapshot, error in
-                guard let documents = snapshot?.documents else {
-                    print("Error fetching conversations: \(error?.localizedDescription ?? "Unknown error")")
+            .addSnapshotListener(includeMetadataChanges: false) { snapshot, error in
+                guard let snapshot = snapshot,
+                      !snapshot.metadata.hasPendingWrites else {
+                    // Ignore local writes that haven't been confirmed by server yet
                     return
                 }
                 
+                if let error = error {
+                    print("Error fetching conversations: \(error.localizedDescription)")
+                    return
+                }
+                
+                let documents = snapshot.documents
                 let conversations = documents.compactMap { document in
                     try? document.data(as: Conversation.self)
                 }

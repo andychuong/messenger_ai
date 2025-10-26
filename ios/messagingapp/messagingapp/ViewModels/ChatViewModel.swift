@@ -39,6 +39,9 @@ class ChatViewModel: ObservableObject {
     @Published var translatedMessages: [String: String] = [:] // messageId -> translatedText
     @Published var isTranslating = false
     
+    // Phase 18: Timezone support
+    @Published var participantTimezones: [String: String] = [:] // userId -> timezone identifier
+    
     // Phase 16: Smart Replies & Suggestions
     @Published var smartReplies: [SmartReply] = []
     @Published var isGeneratingReplies = false
@@ -313,6 +316,33 @@ class ChatViewModel: ObservableObject {
         }
         
         isLoading = false
+        
+        // Fetch participant timezones
+        await fetchParticipantTimezones()
+    }
+    
+    // Phase 18: Fetch participant timezones
+    func fetchParticipantTimezones() async {
+        guard let conversation = conversation else { return }
+        
+        let participantIds = conversation.participants
+        var tempTimezones: [String: String] = [:]
+        
+        for userId in participantIds {
+            do {
+                let userDoc = try await db.collection("users").document(userId).getDocument()
+                if let timezone = userDoc.data()?["timezone"] as? String {
+                    tempTimezones[userId] = timezone
+                }
+            } catch {
+                print("Error fetching timezone for user \(userId): \(error)")
+            }
+        }
+        
+        // Update on main thread to ensure UI refresh
+        await MainActor.run {
+            self.participantTimezones = tempTimezones
+        }
     }
     
     func sendMessage() async {

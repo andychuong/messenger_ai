@@ -142,6 +142,10 @@ struct ConversationRow: View {
         conversation.otherParticipantDetails(currentUserId: currentUserId)
     }
     
+    private var otherUserId: String? {
+        conversation.otherParticipantId(currentUserId: currentUserId)
+    }
+    
     private var unreadCount: Int {
         conversation.unreadCountForUser(currentUserId)
     }
@@ -170,9 +174,12 @@ struct ConversationRow: View {
                 } else if let otherUser = otherUser {
                     // Direct chat - use UserAvatarView with online status
                     UserAvatarView(
-                        participant: otherUser,
+                        photoURL: otherUser.photoURL,
+                        displayName: otherUser.name,
+                        userId: otherUserId,  // Use actual user ID for consistent colors
                         size: 56,
-                        showOnlineStatus: true
+                        showOnlineStatus: true,
+                        isOnline: otherUser.status == "online"
                     )
                 } else {
                     // Fallback

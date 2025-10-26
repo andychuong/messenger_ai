@@ -97,17 +97,6 @@ extension UserAvatarView {
             isOnline: user.status == .online
         )
     }
-    
-    init(participant: ParticipantDetail, size: CGFloat = 50, showOnlineStatus: Bool = false) {
-        self.init(
-            photoURL: participant.photoURL,
-            displayName: participant.name,
-            userId: participant.email, // Use email as unique identifier
-            size: size,
-            showOnlineStatus: showOnlineStatus,
-            isOnline: participant.status == "online"
-        )
-    }
 }
 
 #Preview {

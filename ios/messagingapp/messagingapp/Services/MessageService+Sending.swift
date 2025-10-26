@@ -37,7 +37,7 @@ extension MessageService {
             messageWithId.status = .sending
             
             // Add to queue
-            await MessageQueueService.shared.queueTextMessage(
+            MessageQueueService.shared.queueTextMessage(
                 id: messageId,
                 conversationId: conversationId,
                 text: text,
@@ -51,12 +51,13 @@ extension MessageService {
         // Encrypt message text if shouldEncrypt is true
         let encryptedText = shouldEncrypt ? try await encryptionService.encryptMessage(text, conversationId: conversationId) : text
         
-        // Create message with encrypted text
+        // Create message with encrypted text and sent status
         let message = Message.create(
             conversationId: conversationId,
             senderId: currentUserId,
             senderName: displayName,
             text: encryptedText,
+            status: .sent,  // Create as sent to avoid permission errors
             isEncrypted: shouldEncrypt
         )
         
@@ -66,7 +67,6 @@ extension MessageService {
             .collection("messages")
         
         let docRef = try await messageRef.addDocument(data: try Firestore.Encoder().encode(message))
-        try await docRef.updateData(["status": MessageStatus.sent.rawValue])
         
         // Embeddings are now generated server-side by Firebase trigger
         // The generateMessageEmbedding function will automatically create embeddings
@@ -98,7 +98,7 @@ extension MessageService {
             senderName: displayName,
             text: caption ?? "",
             timestamp: Date(),
-            status: .sending,
+            status: .sent,  // Create as sent to avoid permission errors
             type: .image,
             mediaURL: imageURL,
             mediaType: .image
@@ -109,7 +109,6 @@ extension MessageService {
             .collection("messages")
         
         let docRef = try await messageRef.addDocument(data: try Firestore.Encoder().encode(message))
-        try await docRef.updateData(["status": MessageStatus.sent.rawValue])
         
         message.id = docRef.documentID
         message.status = .sent
@@ -133,7 +132,7 @@ extension MessageService {
             senderName: displayName,
             text: "🎤 Voice message",
             timestamp: Date(),
-            status: .sending,
+            status: .sent,  // Create as sent to avoid permission errors
             type: .voice,
             mediaURL: voiceURL,
             mediaType: .voice,
@@ -145,7 +144,6 @@ extension MessageService {
             .collection("messages")
         
         let docRef = try await messageRef.addDocument(data: try Firestore.Encoder().encode(message))
-        try await docRef.updateData(["status": MessageStatus.sent.rawValue])
         
         message.id = docRef.documentID
         message.status = .sent

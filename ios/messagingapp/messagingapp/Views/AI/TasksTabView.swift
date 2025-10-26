@@ -65,14 +65,14 @@ struct TaskRow: View {
                         .foregroundColor(.secondary)
                     }
                     
-                    if let deadline = task.deadline {
+                    if task.deadline != nil {
                         HStack(spacing: 4) {
                             Image(systemName: "calendar.badge.clock")
                                 .font(.caption)
-                            Text(formattedDeadline(deadline))
+                            Text(formattedDeadline(task.deadline!))
                                 .font(.caption)
                         }
-                        .foregroundColor(isOverdue(deadline) ? .red : .secondary)
+                        .foregroundColor(isOverdue(task.deadline!) ? .red : .secondary)
                     }
                 }
                 

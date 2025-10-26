@@ -24,7 +24,12 @@ class PresenceService: ObservableObject {
     // MARK: - Start Presence Monitoring
     
     func startMonitoring() {
-        guard let userId = Auth.auth().currentUser?.uid else { return }
+        guard let userId = Auth.auth().currentUser?.uid else {
+            print("⚠️ PresenceService: Cannot start monitoring, no user authenticated")
+            return
+        }
+        
+        print("🟢 PresenceService: Starting monitoring for user: \(userId)")
         
         // Set initial status to online
         Task {
@@ -41,6 +46,7 @@ class PresenceService: ObservableObject {
     // MARK: - Stop Presence Monitoring
     
     func stopMonitoring() {
+        print("🔴 PresenceService: Stopping monitoring")
         stopHeartbeat()
         removeAppStateObservers()
     }
@@ -102,12 +108,15 @@ class PresenceService: ObservableObject {
     private func setupAppStateObservers(userId: String) {
         removeAppStateObservers()
         
+        print("📱 PresenceService: Setting up app state observers")
+        
         // App will resign active (going to background)
         NotificationCenter.default.addObserver(
             forName: UIApplication.willResignActiveNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
+            print("🔴 PresenceService: App will resign active")
             Task { @MainActor [weak self] in
                 await self?.setStatus(.offline, userId: userId)
                 self?.stopHeartbeat()
@@ -120,6 +129,7 @@ class PresenceService: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
+            print("🟢 PresenceService: App did become active")
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
                 await self.setStatus(.online, userId: userId)
@@ -133,6 +143,7 @@ class PresenceService: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
+            print("⚫️ PresenceService: App will terminate")
             Task { @MainActor [weak self] in
                 await self?.setStatus(.offline, userId: userId)
             }

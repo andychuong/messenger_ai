@@ -101,31 +101,56 @@ class FriendsListViewModel: ObservableObject {
         userStatusListeners.values.forEach { $0.remove() }
         userStatusListeners.removeAll()
         
+        print("👥 Friends: Setting up real-time listeners for \(friends.count) friend(s)")
+        
         // Set up listener for each friend
         for (_, user) in friends {
             guard let userId = user.id else { continue }
             
             let listener = db.collection("users")
                 .document(userId)
-                .addSnapshotListener { [weak self] snapshot, error in
+                .addSnapshotListener(includeMetadataChanges: false) { [weak self] snapshot, error in
                     guard let self = self,
-                          let data = snapshot?.data(),
-                          let statusString = data["status"] as? String,
-                          let status = User.UserStatus(rawValue: statusString) else {
+                          let snapshot = snapshot,
+                          !snapshot.metadata.isFromCache, // Ignore cached data
+                          !snapshot.metadata.hasPendingWrites else { // Ignore local writes
+                        return
+                    }
+                    
+                    guard let updatedUser = try? snapshot.data(as: User.self) else {
+                        print("❌ Friends: Failed to decode user data for \(userId)")
                         return
                     }
                     
                     Task { @MainActor in
-                        // Update the user's status in our friends array
+                        // Update the entire user object in our friends array
                         if let index = self.friends.firstIndex(where: { $0.1.id == userId }) {
-                            var updatedUser = self.friends[index].1
-                            updatedUser.status = status
-                            if let lastSeen = data["lastSeen"] as? Timestamp {
-                                updatedUser.lastSeen = lastSeen.dateValue()
+                            let oldUser = self.friends[index].1
+                            
+                            // Check if anything changed
+                            let statusChanged = oldUser.status != updatedUser.status
+                            let photoChanged = oldUser.photoURL != updatedUser.photoURL
+                            let nameChanged = oldUser.displayName != updatedUser.displayName
+                            
+                            if statusChanged || photoChanged || nameChanged {
+                                print("🔄 Friends: User data updated for \(updatedUser.displayName)")
+                                if statusChanged {
+                                    print("   📍 Status: \(oldUser.status.rawValue) → \(updatedUser.status.rawValue)")
+                                }
+                                if photoChanged {
+                                    print("   🖼️ Photo: \(oldUser.photoURL ?? "nil") → \(updatedUser.photoURL ?? "nil")")
+                                }
+                                if nameChanged {
+                                    print("   ✏️ Name: \(oldUser.displayName) → \(updatedUser.displayName)")
+                                }
+                                
+                                // Create a new array to trigger SwiftUI update
+                                var updatedFriends = self.friends
+                                updatedFriends[index].1 = updatedUser
+                                self.friends = updatedFriends
+                                
+                                print("✅ Friends: UI refreshed for \(updatedUser.displayName)")
                             }
-                            self.friends[index].1 = updatedUser
-                            // Trigger view update
-                            self.objectWillChange.send()
                         }
                     }
                 }
