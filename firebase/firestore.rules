@@ -188,6 +188,14 @@ service cloud.firestore {
         allow read, write: if isSignedIn() && 
           isParticipant(get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants);
       }
+      
+      // Phase 17: Extracted data subcollection
+      match /extractedData/{docId} {
+        // Participants can read and write extracted structured data
+        // Write access is needed for caching results from Cloud Function
+        allow read, write: if isSignedIn() && 
+          isParticipant(get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants);
+      }
     }
     
     // Calls collection

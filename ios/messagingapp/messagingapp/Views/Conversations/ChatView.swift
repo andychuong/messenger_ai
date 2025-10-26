@@ -24,6 +24,7 @@ struct ChatView: View {
     @State private var showingSendTranslatedMenu = false
     @State private var isTranslatingSend = false
     @State private var languagePickerMode: LanguagePickerMode = .preference
+    @State private var showingExtractedData = false  // Phase 17: Data Extraction
     @FocusState private var isInputFocused: Bool
     
     enum LanguagePickerMode {
@@ -315,6 +316,9 @@ struct ChatView: View {
         }
         .sheet(isPresented: $showingAIAssistant) {
             ConversationAIAssistantView(conversationId: viewModel.conversationId)
+        }
+        .sheet(isPresented: $showingExtractedData) {
+            ExtractedDataView(conversationId: viewModel.conversationId, messages: viewModel.messages)
         }
         .sheet(isPresented: $showingLanguageQuickPicker) {
             LanguageQuickPickerView(
@@ -626,6 +630,7 @@ struct ChatView: View {
     private var trailingToolbarButtons: some View {
         HStack(spacing: 16) {
             translationButton
+            dataExtractionButton
             aiAssistantButton
             
             if viewModel.isGroupChat {
@@ -636,6 +641,19 @@ struct ChatView: View {
                 callButtons
             }
         }
+    }
+    
+    // Phase 17: Data Extraction Button
+    private var dataExtractionButton: some View {
+        Button {
+            showingExtractedData = true
+            HapticManager.shared.selection()
+        } label: {
+            Image(systemName: "doc.text.magnifyingglass")
+                .foregroundColor(.blue)
+        }
+        .accessibilityLabel("Extract Data")
+        .accessibilityHint("Extract structured data from conversation")
     }
     
     private var translationButton: some View {

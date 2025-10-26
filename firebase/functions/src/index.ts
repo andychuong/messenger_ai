@@ -40,6 +40,8 @@ export * from "./ai/slangExplanation"; // Slang and idiom explanations
 // Phase 16: Smart Replies & Suggestions
 export * from "./ai/smartReplies"; // Context-aware smart replies
 export * from "./ai/smartCompose"; // Type-ahead suggestions
+// Phase 17: Enhanced Data Extraction
+export * from "./ai/dataExtraction"; // Multilingual structured data extraction
 
 /**
  * Health check function

@@ -13,5 +13,11 @@
 	<array>
 		<string>com.messagingapp.backgroundSync</string>
 	</array>
+	<key>NSCalendarsUsageDescription</key>
+	<string>MessageAI needs access to your calendar to add extracted events and meetings from your conversations.</string>
+	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
+	<string>MessageAI would like to add events to your calendar that were mentioned in your conversations.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>MessageAI needs access to your contacts to save contact information extracted from your conversations.</string>
 </dict>
 </plist>
