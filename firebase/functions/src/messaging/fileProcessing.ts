@@ -1,5 +1,5 @@
 /**
- * Phase 19: File Processing Cloud Function
+ * File Processing Cloud Function
  * 
  * Handles file uploads, validation, and metadata extraction
  */

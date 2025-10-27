@@ -11,6 +11,7 @@ import AVFoundation
 import FirebaseStorage
 import FirebaseAuth
 import Combine
+import CryptoKit
 
 @MainActor
 class VoiceRecordingService: NSObject, ObservableObject, AVAudioPlayerDelegate {
@@ -197,8 +198,12 @@ class VoiceRecordingService: NSObject, ObservableObject, AVAudioPlayerDelegate {
             return url
         }
         
-        // Check cache first
-        let cacheKey = url.absoluteString.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? UUID().uuidString
+        // Check cache first - use SHA256 hash of URL + encryption status to create a fixed-length cache key
+        // This ensures encrypted and decrypted versions don't collide
+        let urlString = url.absoluteString
+        let keyString = "\(urlString)_\(isEncrypted)"
+        let hash = SHA256.hash(data: Data(keyString.utf8))
+        let cacheKey = hash.compactMap { String(format: "%02x", $0) }.joined()
         let cacheDir = FileManager.default.temporaryDirectory.appendingPathComponent("voice_cache")
         try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
         let cachedURL = cacheDir.appendingPathComponent(cacheKey + ".m4a")

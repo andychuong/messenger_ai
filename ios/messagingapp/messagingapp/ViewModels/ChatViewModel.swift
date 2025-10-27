@@ -28,22 +28,21 @@ class ChatViewModel: ObservableObject {
     @Published var showingImagePicker = false
     @Published var selectedImage: UIImage?
     @Published var showingVoiceRecorder = false
-    @Published var showingFilePicker = false  // Phase 19: File attachments
+    @Published var showingFilePicker = false
     @Published var typingText: String? = nil
     
-    // Phase 9.5 Redesign: Per-message encryption toggle
-    // Phase 12: Changed default to unencrypted, saves user preference
-    @Published var nextMessageEncrypted = false // Default to unencrypted (AI-enhanced)
+    // Per-message encryption toggle (defaults to unencrypted for AI features)
+    @Published var nextMessageEncrypted = false
     
     // Auto-translation state
     @Published var autoTranslateEnabled = false
     @Published var translatedMessages: [String: String] = [:] // messageId -> translatedText
     @Published var isTranslating = false
     
-    // Phase 18: Timezone support
+    // Timezone support for participants
     @Published var participantTimezones: [String: String] = [:] // userId -> timezone identifier
     
-    // Phase 16: Smart Replies & Suggestions
+    // Smart Replies & Suggestions
     @Published var smartReplies: [SmartReply] = []
     @Published var isGeneratingReplies = false
     @Published var showSmartReplies = false
@@ -117,7 +116,7 @@ class ChatViewModel: ObservableObject {
             self.otherUserName = ""
         }
         
-        // Phase 12: Load saved encryption preference for this conversation
+        // Load saved encryption preference for this conversation
         loadEncryptionPreference()
         loadAutoTranslatePreference()
     }
@@ -127,7 +126,7 @@ class ChatViewModel: ObservableObject {
         self.otherUserId = otherUserId
         self.otherUserName = otherUserName
         
-        // Phase 12: Load saved encryption preference for this conversation
+        // Load saved encryption preference for this conversation
         loadEncryptionPreference()
         loadAutoTranslatePreference()
     }
@@ -173,7 +172,7 @@ class ChatViewModel: ObservableObject {
                     await self.markAllMessagesAsRead()
                 }
                 
-                // Phase 16: Generate smart replies for new messages from others
+                // Generate smart replies for new messages from others
                 if !newMessages.isEmpty && self.smartReplyService.shouldGenerateReplies(for: self.conversationId) {
                     // Only generate if the last message is from someone else
                     if let lastMessage = newMessages.last,
@@ -322,7 +321,7 @@ class ChatViewModel: ObservableObject {
         await fetchParticipantTimezones()
     }
     
-    // Phase 18: Fetch participant timezones
+    // Fetch participant timezones
     func fetchParticipantTimezones() async {
         guard let conversation = conversation else { return }
         
@@ -366,15 +365,14 @@ class ChatViewModel: ObservableObject {
         errorMessage = nil
         
         do {
-            // Phase 9.5 Redesign: Pass per-message encryption flag
+            // Pass per-message encryption flag
             let sentMessage = try await messageService.sendMessage(
                 conversationId: conversationId,
                 text: textToSend,
                 shouldEncrypt: nextMessageEncrypted
             )
             
-            // Phase 12: Keep user's encryption preference (don't reset)
-            // User's preference is now saved and persists across messages
+            // Keep user's encryption preference (persists across messages)
             
             if !messages.contains(where: { $0.id == sentMessage.id }) {
                 messages.append(sentMessage)
@@ -592,7 +590,7 @@ class ChatViewModel: ObservableObject {
         isSending = false
     }
     
-    // Phase 19: Send file attachment
+    // Send file attachment
     func sendFileMessage(fileURL: URL) async {
         isSending = true
         errorMessage = nil
@@ -681,11 +679,11 @@ class ChatViewModel: ObservableObject {
         isSending = false
     }
     
-    // MARK: - Phase 9.5 Redesign: Per-Message Encryption Toggle
+    // MARK: - Per-Message Encryption Toggle
     
     func toggleNextMessageEncryption() {
         nextMessageEncrypted.toggle()
-        // Phase 12: Save user's preference for this conversation
+        // Save user's preference for this conversation
         saveEncryptionPreference()
         print(nextMessageEncrypted ? "🔒 Messages will be encrypted" : "🔓 Messages will be AI-enhanced")
     }
@@ -856,7 +854,7 @@ class ChatViewModel: ObservableObject {
         }
     }
     
-    // MARK: - Phase 16: Smart Replies
+    // MARK: - Smart Replies
     
     /// Generate smart reply suggestions based on recent conversation
     func generateSmartReplies() async {
@@ -907,7 +905,7 @@ class ChatViewModel: ObservableObject {
         return settings.enabled && showSmartReplies && !smartReplies.isEmpty
     }
     
-    // MARK: - Phase 16: Smart Compose
+    // MARK: - Smart Compose
     
     /// Generate type-ahead completion for partially typed text
     func generateSmartCompose(partialText: String) {

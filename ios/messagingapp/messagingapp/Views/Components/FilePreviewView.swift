@@ -2,7 +2,7 @@
 //  FilePreviewView.swift
 //  messagingapp
 //
-//  Phase 19: File Attachments - Quick Look file preview
+//  Quick Look file preview for file attachments
 //
 
 import SwiftUI

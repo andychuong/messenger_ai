@@ -2,7 +2,7 @@
 //  FilePickerView.swift
 //  messagingapp
 //
-//  Phase 19: File Attachments - Document picker integration
+//  Document picker integration for file attachments
 //
 
 import SwiftUI

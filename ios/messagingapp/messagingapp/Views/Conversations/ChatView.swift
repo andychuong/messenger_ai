@@ -24,7 +24,7 @@ struct ChatView: View {
     @State private var showingSendTranslatedMenu = false
     @State private var isTranslatingSend = false
     @State private var languagePickerMode: LanguagePickerMode = .preference
-    @State private var showingExtractedData = false  // Phase 17: Data Extraction
+    @State private var showingExtractedData = false
     @FocusState private var isInputFocused: Bool
     
     enum LanguagePickerMode {
@@ -32,7 +32,7 @@ struct ChatView: View {
         case translateSend  // Translate and send the current message
     }
     
-    // Phase 4.5: Support for both direct and group conversations
+    // Support for both direct and group conversations
     init(conversation: Conversation) {
         _viewModel = StateObject(wrappedValue: ChatViewModel(conversation: conversation))
     }
@@ -79,7 +79,7 @@ struct ChatView: View {
                     .animation(.spring(response: 0.3, dampingFraction: 0.7), value: typingText)
             }
             
-            // Phase 16: Smart Replies (positioned above input bar)
+            // Smart Replies (positioned above input bar)
             if viewModel.shouldShowSmartReplies() {
                 SmartRepliesView(
                     smartReplies: viewModel.smartReplies,
@@ -143,7 +143,7 @@ struct ChatView: View {
                         .disabled(viewModel.isSending)
                     }
                     
-                    // Phase 19 UX: Combined Image/File picker button (only when not typing)
+                    // Combined Image/File picker button (only when not typing)
                     if !viewModel.isEditingMessage && viewModel.messageText.isEmpty {
                         Menu {
                             Button {
@@ -171,7 +171,7 @@ struct ChatView: View {
                         .disabled(viewModel.isSending)
                     }
                     
-                    // Phase 15: Formality adjustment button (shows when typing)
+                    // Formality adjustment button (shows when typing)
                     if !viewModel.isEditingMessage,
                        !viewModel.nextMessageEncrypted,
                        !viewModel.messageText.isEmpty,
@@ -225,7 +225,7 @@ struct ChatView: View {
                                 // Handle typing indicators
                                 viewModel.handleTextChange()
                                 
-                                // Phase 16: Trigger smart compose
+                                // Trigger smart compose
                                 if SmartReplyService.shared.getSettings().enabled && !viewModel.isEditingMessage {
                                     viewModel.generateSmartCompose(partialText: newValue)
                                 }
@@ -660,7 +660,7 @@ struct ChatView: View {
                     }
                 }
                 
-                // Phase 18: Timezone difference display
+                // Timezone difference display
                 if let timezoneText = otherUserTimezoneText {
                     Text(timezoneText)
                         .font(.caption2)
@@ -670,7 +670,7 @@ struct ChatView: View {
         }
     }
     
-    // Phase 18: Calculate timezone difference text for other user
+    // Calculate timezone difference text for other user
     private var otherUserTimezoneText: String? {
         guard let currentUserId = viewModel.currentUserId,
               let otherUserTimezone = viewModel.participantTimezones[viewModel.otherUserId],
@@ -722,7 +722,7 @@ struct ChatView: View {
         }
     }
     
-    // Phase 17: Data Extraction Button
+    // Data Extraction Button
     private var dataExtractionButton: some View {
         Button {
             showingExtractedData = true

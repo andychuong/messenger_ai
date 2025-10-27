@@ -2,8 +2,6 @@
 //  FileMetadata.swift
 //  messagingapp
 //
-//  Phase 19: File Attachments
-//
 
 import Foundation
 import UniformTypeIdentifiers

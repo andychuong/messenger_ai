@@ -17,7 +17,7 @@ interface TranscriptionRequest {
   messageId: string;
   conversationId: string;
   audioUrl: string;
-  translateTo?: string[]; // Phase 19.2: Optional array of language codes to translate to
+  translateTo?: string[]; // Optional array of language codes to translate to
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -29,8 +29,7 @@ interface TranscriptionResponse {
 }
 
 /**
- * Transcribe voice message using Whisper API
- * Phase 19.2: Enhanced with language detection and translation
+ * Transcribe voice message using Whisper API with language detection and translation
  */
 export const transcribeVoiceMessage = functions.https.onCall(
   async (data: TranscriptionRequest, context) => {
@@ -105,7 +104,7 @@ export const transcribeVoiceMessage = functions.https.onCall(
         type: "audio/m4a",
       });
       
-      // Phase 19.2: Transcribe using Whisper with language detection
+      // Transcribe using Whisper with language detection
       // First, transcribe without language constraint to auto-detect
       const transcription = await openai.audio.transcriptions.create({
         file: audioFile,
@@ -119,7 +118,7 @@ export const transcribeVoiceMessage = functions.https.onCall(
       
       console.log(`Detected language: ${detectedLanguage}`);
       
-      // Phase 19.2: Generate translations if requested
+      // Generate translations if requested
       const translations: Record<string, string> = {};
       if (translateTo && translateTo.length > 0) {
         for (const targetLang of translateTo) {
@@ -155,7 +154,7 @@ export const transcribeVoiceMessage = functions.https.onCall(
 );
 
 /**
- * Phase 19.2: Helper function to translate text using GPT-4o
+ * Helper function to translate text using GPT-4o
  */
 async function translateText(text: string, targetLanguage: string): Promise<string> {
   try {

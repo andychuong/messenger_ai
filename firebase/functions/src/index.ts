@@ -24,7 +24,7 @@ export * from "./messaging/notifications";
 export * from "./messaging/friendships";
 export * from "./messaging/callNotifications";
 export * from "./messaging/syncUserData"; // Sync user data to conversations
-export * from "./messaging/fileProcessing"; // Phase 19: File processing
+export * from "./messaging/fileProcessing";
 export * from "./ai/translation";
 export * from "./ai/assistant";
 export * from "./ai/langchainAgent"; // LangChain-powered agent

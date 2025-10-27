@@ -2,8 +2,6 @@
 //  FileService.swift
 //  messagingapp
 //
-//  Phase 19: File Attachments
-//
 
 import Foundation
 import FirebaseFirestore
@@ -82,7 +80,7 @@ class FileService {
         let mimeType = getMimeType(for: fileURL)
         
         // Check size limit
-        let maxSize = freeTierMaxSize  // TODO: Check user tier
+        let maxSize = freeTierMaxSize
         if fileSize > maxSize {
             throw FileServiceError.fileTooLarge(maxSize: maxSize)
         }

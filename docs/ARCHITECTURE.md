@@ -1,14 +1,14 @@
 # Messaging App - Complete Architecture
 
-**Version**: 2.0  
-**Last Updated**: October 25, 2025  
+**Version**: 2.1  
+**Last Updated**: October 26, 2025  
 **Platform**: iOS 17.0+ | Firebase | OpenAI
 
 ---
 
 ## 🎯 System Overview
 
-A modern, feature-rich messaging application with end-to-end encryption, WebRTC video/voice calling, AI-powered assistance, real-time translation, and semantic search capabilities.
+A modern, feature-rich messaging application with end-to-end encryption, WebRTC video/voice calling, AI-powered assistance, real-time translation, semantic search, file attachments, and voice message translation capabilities.
 
 ---
 
@@ -84,6 +84,7 @@ A modern, feature-rich messaging application with end-to-end encryption, WebRTC 
 │  │  │                     Media & Communication Services                │   │  │
 │  │  │                                                                   │   │  │
 │  │  │  • ImageService       → Image upload/download/compression        │   │  │
+│  │  │  • FileService        → File upload/download/caching              │   │  │
 │  │  │  • VoiceRecordingServ → Audio recording & playback               │   │  │
 │  │  │  • WebRTCService      → Video/voice calling (P2P)                │   │  │
 │  │  │  • SignalingService   → WebRTC signaling via Firestore           │   │  │
@@ -105,8 +106,9 @@ A modern, feature-rich messaging application with end-to-end encryption, WebRTC 
 │  │  • Message                        • DateFormatter                         │  │
 │  │  • Conversation                   • ErrorHandling                         │  │
 │  │  • Friendship                     • NetworkMonitor                        │  │
-│  │  • UserSettings                                                           │  │
-│  │  • AIAssistantMessage                                                     │  │
+│  │  • UserSettings                   • HapticManager                         │  │
+│  │  • AIAssistantMessage             • SoundManager                          │  │
+│  │  • FileMetadata                                                           │  │
 │  └──────────────────────────────────────────────────────────────────────────┘  │
 │                                      ↓                                          │
 │  ┌──────────────────────────────────────────────────────────────────────────┐  │
@@ -162,10 +164,13 @@ A modern, feature-rich messaging application with end-to-end encryption, WebRTC 
 │  │  │ │       └── {messageId}/                                          │    │  │
 │  │  │ │           ├── text (encrypted if enabled)                      │    │  │
 │  │  │ │           ├── senderId, timestamp                              │    │  │
-│  │  │ │           ├── type: "text" | "voice" | "image"                │    │  │
+│  │  │ │           ├── type: "text"|"voice"|"image"|"file"             │    │  │
 │  │  │ │           ├── isEncrypted: boolean                             │    │  │
 │  │  │ │           ├── translatedVersions?: { lang: text }              │    │  │
 │  │  │ │           ├── voiceMessageURL?, imageURL?                      │    │  │
+│  │  │ │           ├── voiceTranslations?: { lang: text }               │    │  │
+│  │  │ │           ├── detectedLanguage?: string                       │    │  │
+│  │  │ │           ├── fileMetadata?: { ... }                          │    │  │
 │  │  │ │           └── readBy: { userId: timestamp }                    │    │  │
 │  │  └──────────────────────────────────────────────────────────────────┘    │  │
 │  │                                                                            │  │
@@ -219,6 +224,7 @@ A modern, feature-rich messaging application with end-to-end encryption, WebRTC 
 │  │  • users/{userId}/profile_photos/     → Profile pictures                 │  │
 │  │  • conversations/{convId}/images/     → Image messages                   │  │
 │  │  • conversations/{convId}/voice/      → Voice messages                   │  │
+│  │  • conversations/{convId}/files/      → File attachments                  │  │
 │  │  • groups/{groupId}/photos/           → Group photos                     │  │
 │  │                                                                            │  │
 │  │  Features:                                                                │  │
@@ -253,7 +259,9 @@ A modern, feature-rich messaging application with end-to-end encryption, WebRTC 
 │  │  │                                                                      │ │  │
 │  │  │  🎤 voiceToText (callable)                                          │ │  │
 │  │  │     → Whisper API for voice transcription                          │ │  │
-│  │  │     → Multi-language support                                       │ │  │
+│  │  │     → Automatic language detection (verbose JSON)                  │ │  │
+│  │  │     → Multi-language translation (GPT-4o)                          │ │  │
+│  │  │     → Translation caching                                          │ │  │
 │  │  │                                                                      │ │  │
 │  │  │  📊 summarizeConversation (callable)                               │ │  │
 │  │  │     → GPT-4o conversation summarization                            │ │  │
@@ -281,6 +289,11 @@ A modern, feature-rich messaging application with end-to-end encryption, WebRTC 
 │  │  │  📞 sendCallNotification (callable)                                 │ │  │
 │  │  │     → Notify recipient of incoming call                             │ │  │
 │  │  │     → Push notification via FCM                                     │ │  │
+│  │  │                                                                      │ │  │
+│  │  │  📎 processFileUpload (callable)                                    │ │  │
+│  │  │     → File validation and metadata extraction                      │ │  │
+│  │  │     → Placeholder for virus scanning                               │ │  │
+│  │  │     → Placeholder for thumbnail generation                         │ │  │
 │  │  └─────────────────────────────────────────────────────────────────────┘ │  │
 │  │                                                                            │  │
 │  │  ┌─────────────────────────────────────────────────────────────────────┐ │  │
@@ -731,8 +744,9 @@ context.auth.uid available in functions
 
 **Message Types**:
 - Text (plain or encrypted)
-- Voice (audio file + optional transcription)
+- Voice (audio file + optional transcription + translations)
 - Image (compressed, uploaded to Storage)
+- File (documents, PDFs, archives, code files)
 
 **Features**:
 - Real-time delivery
@@ -922,6 +936,7 @@ messagingapp/
 │   ├── Friendship.swift
 │   ├── UserSettings.swift
 │   ├── CallState.swift
+│   ├── FileMetadata.swift
 │   └── AIAssistantMessage.swift
 │
 ├── Views/
@@ -948,7 +963,9 @@ messagingapp/
 │   └── Components/
 │       ├── UserAvatarView.swift
 │       ├── LanguageQuickPickerView.swift
-│       └── EncryptedImageView.swift
+│       ├── EncryptedImageView.swift
+│       ├── FilePickerView.swift
+│       └── FilePreviewView.swift
 │
 ├── ViewModels/
 │   ├── ChatViewModel.swift
@@ -968,6 +985,7 @@ messagingapp/
 │   ├── VoiceRecordingService.swift
 │   ├── VoiceService.swift
 │   ├── ImageService.swift
+│   ├── FileService.swift
 │   ├── SettingsService.swift
 │   ├── WebRTCService.swift
 │   ├── SignalingService.swift
@@ -989,32 +1007,36 @@ messagingapp/
 
 ## 🚀 Future Enhancements
 
-### Phase 13: Advanced Features
+### Phase 20+: Advanced Features
 - [ ] Message reactions (emoji responses)
 - [ ] Threads/replies to specific messages
-- [ ] Voice/video message support
 - [ ] Message forwarding
 - [ ] Conversation pinning
+- [ ] Enhanced file preview (PDF thumbnails, video previews)
+- [ ] Batch file operations
+- [ ] File virus scanning integration
 
-### Phase 14: AI Enhancements
+### Phase 21+: AI Enhancements
 - [ ] Custom AI personality settings
 - [ ] Conversation insights dashboard
-- [ ] Smart reply suggestions
+- [ ] Smart reply suggestions (started in Phase 16)
 - [ ] Meeting extraction from conversations
 - [ ] Automatic reminders
+- [ ] Real-time voice translation during playback
 
-### Phase 15: Collaboration
-- [ ] Shared documents/files
-- [ ] Collaborative editing
+### Phase 22+: Collaboration
+- [ ] Collaborative document editing
 - [ ] Screen sharing in calls
 - [ ] Group video calls (4+ participants)
+- [ ] Whiteboard/drawing tools
 
-### Phase 16: Enterprise
+### Phase 23+: Enterprise
 - [ ] Admin dashboard
 - [ ] Analytics & reporting
 - [ ] User management
 - [ ] SSO integration
 - [ ] Compliance features
+- [ ] Data retention policies
 
 ---
 
@@ -1068,7 +1090,8 @@ messagingapp/
 ---
 
 **Architecture Status**: ✅ **Production-Ready**  
-**Last Review**: October 25, 2025  
+**Last Review**: October 26, 2025  
+**Latest Features**: File attachments & voice translation  
 **Next Review**: Q1 2026 or when adding major features
 
 ---
